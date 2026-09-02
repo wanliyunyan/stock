@@ -874,6 +874,8 @@
       const quoteFields = "f12,f13,f14,f2,f20,f23,f115,f124";
       const quoteBatchSize = 80;
       const liveRefreshMs = 60 * 1000;
+      const isLocalDev = location.protocol === "file:" || ["localhost", "127.0.0.1", "::1"].includes(location.hostname);
+      const apiBaseUrl = resolveApiBaseUrl();
       const sourceMeta = {
         sourceUrl: "https://xuangu.eastmoney.com/Result?id=xc139baa1b02c2016458&a=edit_way&j=refreshUrl",
         originalXcId: "xc139baa1b02c2016458",
@@ -932,8 +934,12 @@
       let liveRequestId = 0;
 
       applyData(emptySource, { type: "loading", error: "" });
-      scheduleLiveUpdate(0);
-      window.setInterval(() => scheduleLiveUpdate(0), liveRefreshMs);
+      if (apiBaseUrl || isLocalDev) {
+        scheduleLiveUpdate(0);
+        window.setInterval(() => scheduleLiveUpdate(0), liveRefreshMs);
+      } else {
+        applyData(emptySource, { type: "error", error: "请先配置 Worker 地址，例如 ?api=https://xxx.workers.dev" });
+      }
 
       searchInput.addEventListener("input", render);
       localNumericFilters.forEach(filter => {
@@ -1052,13 +1058,46 @@
         return typeof value === "number" ? String(value) : String(value || "-");
       }
 
+      function resolveApiBaseUrl() {
+        const params = new URLSearchParams(location.search);
+        if (params.has("api")) {
+          const requested = normalizeApiBaseUrl(params.get("api"));
+          try {
+            if (requested) window.localStorage.setItem("stock.apiBaseUrl", requested);
+            else window.localStorage.removeItem("stock.apiBaseUrl");
+          } catch {
+            /* ignore storage errors */
+          }
+          return requested;
+        }
+        return readStoredApiBaseUrl();
+      }
+
+      function readStoredApiBaseUrl() {
+        try {
+          return normalizeApiBaseUrl(window.localStorage.getItem("stock.apiBaseUrl"));
+        } catch {
+          return "";
+        }
+      }
+
+      function normalizeApiBaseUrl(value) {
+        return String(value || "").trim().replace(/\/+$/, "");
+      }
+
+      function stockApiUrl(path, fallbackUrl) {
+        if (apiBaseUrl) return `${apiBaseUrl}${path}`;
+        if (isLocalDev) return fallbackUrl;
+        throw new Error("请先配置 Worker 地址，例如 ?api=https://xxx.workers.dev");
+      }
+
       async function requestEastmoneyQuotes(securities) {
         const rows = [];
         let latestUpdatedAt = 0;
         for (let index = 0; index < securities.length; index += quoteBatchSize) {
           const batch = securities.slice(index, index + quoteBatchSize);
           const secids = batch.map(item => `${item.market}.${item.code}`).join(",");
-          const url = `${eastmoneyQuoteApi}?fltt=2&invt=2&fields=${quoteFields}&secids=${encodeURIComponent(secids)}`;
+          const url = `${stockApiUrl("/api/quotes", eastmoneyQuoteApi)}?fltt=2&invt=2&fields=${quoteFields}&secids=${encodeURIComponent(secids)}`;
           const response = await fetch(url, {
             headers: {
               "Accept": "application/json, text/plain, */*"
@@ -1383,7 +1422,7 @@
       }
 
       async function requestEastmoney(query) {
-        const response = await fetch(eastmoneySearchApi, {
+        const response = await fetch(stockApiUrl("/api/stocks", eastmoneySearchApi), {
           method: "POST",
           headers: {
             "Accept": "application/json, text/plain, */*",
