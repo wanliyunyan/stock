@@ -972,7 +972,13 @@
       async function enrichRealtimeQuoteData(source) {
         if (!source || !Array.isArray(source.rows) || !source.rows.length) return source;
         const sourceWithRealtimeDates = applyRealtimeColumnDates(source, source.realtimeQuoteTime || source.quoteTime || source.searchCodeTime);
-        const quoteData = await fetchRealtimeQuotes(sourceWithRealtimeDates.rows);
+        let quoteData = null;
+        try {
+          quoteData = await fetchRealtimeQuotes(sourceWithRealtimeDates.rows);
+        } catch (error) {
+          console.warn("Realtime quote enrichment failed:", error);
+          return sourceWithRealtimeDates;
+        }
         if (!quoteData || !Array.isArray(quoteData.rows) || !quoteData.rows.length) return sourceWithRealtimeDates;
         return mergeRealtimeQuoteData(sourceWithRealtimeDates, quoteData);
       }
@@ -1103,8 +1109,9 @@
               "Accept": "application/json, text/plain, */*"
             }
           });
-          const apiData = await response.json();
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const responseText = await response.text();
+          if (!response.ok) throw new Error(responseText || `HTTP ${response.status}`);
+          const apiData = parseJsonResponse(responseText, "行情接口返回格式异常");
           const diff = apiData && apiData.data && apiData.data.diff;
           if (!Array.isArray(diff)) throw new Error((apiData && apiData.msg) || "行情接口未返回数据");
           diff.forEach(item => {
@@ -1430,9 +1437,18 @@
           },
           body: JSON.stringify(buildEastmoneyRequest(query))
         });
-        const apiData = await response.json();
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const responseText = await response.text();
+        if (!response.ok) throw new Error(responseText || `HTTP ${response.status}`);
+        const apiData = parseJsonResponse(responseText, "选股接口返回格式异常");
         return apiData;
+      }
+
+      function parseJsonResponse(text, fallbackMessage) {
+        try {
+          return JSON.parse(text);
+        } catch {
+          throw new Error(text ? `${fallbackMessage}: ${text.slice(0, 120)}` : fallbackMessage);
+        }
       }
 
       function buildEastmoneyRequest(query) {
