@@ -1,0 +1,1741 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>东方财富条件选股结果 - 静态表格</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --panel-soft: #f9fbff;
+      --line: #dfe7f1;
+      --line-strong: #c7d4e5;
+      --text: #1f2937;
+      --muted: #65758b;
+      --accent: #2454d6;
+      --accent-soft: #edf3ff;
+      --red: #d8343f;
+      --green: #118a55;
+      --amber: #9a6500;
+      --shadow: 0 12px 28px rgba(31, 41, 55, 0.08);
+      --head-row-height: 40px;
+      font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .page {
+      width: 100%;
+      height: 100vh;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      padding: 18px 18px 28px;
+    }
+
+    .app-header {
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) auto;
+      gap: 18px;
+      align-items: end;
+      width: 100%;
+      margin: 0 0 14px;
+      flex: 0 0 auto;
+    }
+
+    main {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .eyebrow {
+      margin: 0 0 7px;
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 26px;
+      line-height: 1.22;
+      font-weight: 750;
+      letter-spacing: 0;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(118px, auto));
+      gap: 8px;
+    }
+
+    .meta-item {
+      min-height: 58px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: 0 1px 0 rgba(31, 41, 55, 0.03);
+    }
+
+    .meta-item span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.2;
+    }
+
+    .meta-item strong {
+      display: block;
+      margin-top: 7px;
+      font-size: 16px;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .query-band,
+    .filter-panel,
+    .table-shell {
+      width: 100%;
+      margin: 0;
+      border: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    .query-band {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border-radius: 8px 8px 0 0;
+      background: linear-gradient(90deg, #ffffff 0%, #f8fbff 48%, #fffaf0 100%);
+    }
+
+    .query-controls {
+      flex: 1 1 auto;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .threshold-field {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 38px;
+      padding: 5px 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      color: #344052;
+      font-weight: 700;
+      line-height: 1.3;
+    }
+
+    .threshold-label {
+      white-space: nowrap;
+    }
+
+    .threshold-input-shell {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      height: 28px;
+      padding: 0 8px;
+      border: 1px solid var(--line-strong);
+      border-radius: 6px;
+      background: #f8fbff;
+    }
+
+    .threshold-input {
+      width: 88px;
+      min-width: 0;
+      border: 0;
+      background: transparent;
+      color: var(--text);
+      font: inherit;
+      font-weight: 750;
+      text-align: right;
+      outline: none;
+    }
+
+    .threshold-input:focus {
+      color: var(--accent);
+    }
+
+    .threshold-unit,
+    .query-rest {
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .query-rest {
+      flex: 0 0 auto;
+      line-height: 1.65;
+    }
+
+    .source-link {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 34px;
+      padding: 0 12px;
+      border: 1px solid var(--line-strong);
+      border-radius: 7px;
+      background: #fff;
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .filter-panel {
+      padding: 12px 14px;
+      border-top: 0;
+      background: #fbfdff;
+    }
+
+    .filter-row {
+      display: flex;
+      gap: 8px;
+      align-items: end;
+    }
+
+    .filter-grid {
+      flex: 1 1 auto;
+      min-width: 0;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 8px;
+    }
+
+    .range-filter {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+      align-items: start;
+      min-height: 60px;
+      padding: 6px 9px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+    }
+
+    .online-filter {
+      flex: 0 1 260px;
+      min-width: 240px;
+      min-height: 58px;
+      background: #ffffff;
+    }
+
+    .range-label {
+      overflow: hidden;
+      color: #344052;
+      font-weight: 700;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .range-inputs {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 5px;
+      align-items: center;
+    }
+
+    .range-input {
+      width: 100%;
+      min-width: 0;
+      height: 27px;
+      border: 1px solid var(--line-strong);
+      border-radius: 6px;
+      background: #f8fbff;
+      color: var(--text);
+      font: inherit;
+      font-weight: 700;
+      text-align: right;
+      outline: none;
+      padding: 0 7px;
+    }
+
+    .range-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(36, 84, 214, 0.12);
+    }
+
+    .search-filter .control {
+      height: 27px;
+      border-radius: 6px;
+      background: #f8fbff;
+      font-weight: 700;
+    }
+
+    .reset-button {
+      flex: 0 0 auto;
+      width: 58px;
+      height: 27px;
+      border-radius: 6px;
+      border-color: var(--line-strong);
+      background: #f8fbff;
+      color: var(--accent);
+    }
+
+    .control {
+      width: 100%;
+      height: 36px;
+      border: 1px solid var(--line-strong);
+      border-radius: 7px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+      outline: none;
+    }
+
+    .control:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(36, 84, 214, 0.12);
+    }
+
+    input.control {
+      padding: 0 12px;
+    }
+
+    select.control {
+      padding: 0 34px 0 12px;
+    }
+
+    button {
+      height: 36px;
+      border: 1px solid var(--line-strong);
+      border-radius: 7px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .primary-button {
+      min-width: 92px;
+      padding: 0 13px;
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .primary-button:hover {
+      color: #fff;
+      background: #1d49bd;
+    }
+
+    .icon-button {
+      width: 38px;
+      padding: 0;
+      font-size: 17px;
+      line-height: 1;
+    }
+
+    .table-shell {
+      border-top: 0;
+      border-radius: 0 0 8px 8px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .table-status {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 34px;
+      padding: 0 14px;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      background: var(--panel-soft);
+      color: var(--muted);
+      font-size: 13px;
+      flex: 0 0 auto;
+    }
+
+    .status-strong {
+      color: var(--text);
+      font-weight: 750;
+    }
+
+    .table-wrap {
+      flex: 1 1 auto;
+      min-height: 0;
+      max-height: none;
+      overflow: auto;
+      background: #fff;
+    }
+
+    table {
+      width: max-content;
+      min-width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+
+    th,
+    td {
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      background: #fff;
+      vertical-align: middle;
+    }
+
+    th {
+      text-align: center;
+    }
+
+    td {
+      text-align: right;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 4;
+      height: var(--head-row-height);
+      padding: 0;
+      background: #f2f6fb;
+      color: #334155;
+      font-size: 13px;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
+    thead tr:nth-child(2) th {
+      top: var(--head-row-height);
+      background: #f7f9fd;
+      color: #6b7a90;
+      font-size: 12px;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    tbody tr:nth-child(even) td {
+      background: #fbfcfe;
+    }
+
+    tbody tr:hover td {
+      background: var(--accent-soft);
+    }
+
+    td {
+      height: 44px;
+      padding: 5px 10px;
+      color: #526073;
+      line-height: 1.25;
+      white-space: nowrap;
+    }
+
+    .text-left {
+      text-align: left;
+    }
+
+    .text-center {
+      text-align: center;
+    }
+
+    .stock-code,
+    .stock-name {
+      color: #173fff;
+      font-weight: 650;
+    }
+
+    .cell-main {
+      display: block;
+      color: inherit;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .cell-sub {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .value-up .cell-main,
+    .value-up {
+      color: var(--red);
+    }
+
+    .value-down .cell-main,
+    .value-down {
+      color: var(--green);
+    }
+
+    .group-head {
+      padding: 0;
+      text-align: center;
+      color: #2f3e54;
+    }
+
+    .group-head-inner {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      padding: 0 10px;
+      font-size: 13px;
+      font-weight: 750;
+      line-height: 1.1;
+      text-align: center;
+    }
+
+    .th-button {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      min-height: var(--head-row-height);
+      padding: 0 10px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      color: inherit;
+      font-size: 13px;
+      font-weight: 750;
+      line-height: 1.1;
+      text-align: center;
+      cursor: pointer;
+    }
+
+    .th-button:hover {
+      background: rgba(36, 84, 214, 0.08);
+      color: var(--accent);
+    }
+
+    .th-title {
+      display: block;
+      width: 100%;
+      overflow: hidden;
+      line-height: 1.1;
+      font-weight: 750;
+      text-overflow: ellipsis;
+      text-align: center;
+    }
+
+    .th-date {
+      width: 100%;
+      margin-top: 2px;
+      overflow: hidden;
+      text-align: center;
+      line-height: 1.1;
+      color: #8995a6;
+      font-size: 11px;
+      font-weight: 650;
+      text-overflow: ellipsis;
+    }
+
+    .sort-mark {
+      margin-left: 4px;
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 750;
+    }
+
+    .sticky-col {
+      position: sticky;
+      z-index: 3;
+      box-shadow: 1px 0 0 var(--line);
+    }
+
+    th.sticky-col {
+      z-index: 6;
+    }
+
+    tbody tr:hover .sticky-col {
+      background: var(--accent-soft);
+    }
+
+    .sticky-serial {
+      left: 0;
+      min-width: 52px;
+      width: 52px;
+      text-align: center;
+    }
+
+    th.sticky-serial .th-button,
+    td.sticky-serial {
+      padding-left: 6px;
+      padding-right: 6px;
+    }
+
+    .sticky-code {
+      left: 52px;
+      min-width: 96px;
+      width: 96px;
+      text-align: center;
+    }
+
+    .sticky-name {
+      left: 148px;
+      min-width: 136px;
+      width: 136px;
+      text-align: center;
+    }
+
+    .col-price,
+    .col-change,
+    .col-pchg,
+    .col-st,
+    .col-delisting {
+      min-width: 92px;
+      width: 92px;
+    }
+
+    .col-market {
+      min-width: 156px;
+      width: 156px;
+      text-align: center;
+    }
+
+    .col-growth {
+      min-width: 178px;
+      width: 178px;
+    }
+
+    .col-contract {
+      min-width: 132px;
+      width: 132px;
+    }
+
+    .col-wide {
+      min-width: 132px;
+      width: 132px;
+    }
+
+    .col-realtime {
+      min-width: 144px;
+      width: 144px;
+    }
+
+    .empty-state {
+      padding: 40px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .footer {
+      width: 100%;
+      margin: 12px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+      flex: 0 0 auto;
+    }
+
+    @media (max-width: 980px) {
+      .page {
+        padding: 12px;
+      }
+
+      .app-header {
+        grid-template-columns: 1fr;
+        align-items: start;
+      }
+
+      .meta-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+    }
+
+    @media (max-width: 620px) {
+      h1 {
+        font-size: 21px;
+      }
+
+      .meta-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .query-band {
+        display: block;
+      }
+
+      .query-controls {
+        display: grid;
+        grid-template-columns: 1fr;
+      }
+
+      .filter-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .filter-row {
+        display: grid;
+        grid-template-columns: 1fr;
+      }
+
+      .reset-button {
+        justify-self: start;
+      }
+
+      .threshold-field {
+        justify-content: space-between;
+      }
+
+      .threshold-input-shell {
+        padding: 0 7px;
+      }
+
+      .threshold-input {
+        width: 72px;
+      }
+
+      .source-link {
+        margin-top: 10px;
+      }
+
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">东方财富条件选股</p>
+        <h1>合同负债增长筛选结果</h1>
+      </div>
+      <div class="meta-grid" aria-label="数据概览">
+        <div class="meta-item">
+          <span>股票数</span>
+          <strong id="totalCount">-</strong>
+        </div>
+        <div class="meta-item">
+          <span>行情时间</span>
+          <strong id="quoteTime">-</strong>
+        </div>
+        <div class="meta-item">
+          <span>来源 ID</span>
+          <strong id="sourceId">-</strong>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="query-band">
+        <div class="query-controls" aria-label="合同负债筛选条件">
+          <span class="query-rest">不要ST股及不要退市股；不要北交所</span>
+          <label class="range-filter online-filter">
+            <span class="range-label">合同负债同比增长率</span>
+            <span class="range-inputs">
+              <input class="range-input" id="yoyThresholdInput" type="number" step="0.01" value="100" inputmode="decimal" placeholder="最小" aria-label="合同负债同比增长率最小值">
+              <input class="range-input" id="yoyMaxInput" type="number" step="0.01" inputmode="decimal" placeholder="最大" aria-label="合同负债同比增长率最大值">
+            </span>
+          </label>
+          <label class="range-filter online-filter">
+            <span class="range-label">合同负债环比增长率</span>
+            <span class="range-inputs">
+              <input class="range-input" id="qoqThresholdInput" type="number" step="0.01" value="100" inputmode="decimal" placeholder="最小" aria-label="合同负债环比增长率最小值">
+              <input class="range-input" id="qoqMaxInput" type="number" step="0.01" inputmode="decimal" placeholder="最大" aria-label="合同负债环比增长率最大值">
+            </span>
+          </label>
+        </div>
+        <a class="source-link" id="sourceLink" href="#" target="_blank" rel="noreferrer">来源页面</a>
+      </section>
+
+      <section class="filter-panel" aria-label="指标筛选">
+        <div class="filter-row">
+          <div class="filter-grid">
+            <label class="range-filter search-filter">
+              <span class="range-label">搜索代码、名称</span>
+              <input class="control" id="searchInput" type="search" autocomplete="off" placeholder="输入代码或名称">
+            </label>
+            <label class="range-filter">
+              <span class="range-label">净资产收益率</span>
+              <span class="range-inputs">
+                <input class="range-input" id="roeMinInput" type="number" step="0.01" inputmode="decimal" placeholder="最小" aria-label="净资产收益率最小值">
+                <input class="range-input" id="roeMaxInput" type="number" step="0.01" inputmode="decimal" placeholder="最大" aria-label="净资产收益率最大值">
+              </span>
+            </label>
+            <label class="range-filter">
+              <span class="range-label">毛利率</span>
+              <span class="range-inputs">
+                <input class="range-input" id="grossMarginMinInput" type="number" step="0.01" inputmode="decimal" placeholder="最小" aria-label="毛利率最小值">
+                <input class="range-input" id="grossMarginMaxInput" type="number" step="0.01" inputmode="decimal" placeholder="最大" aria-label="毛利率最大值">
+              </span>
+            </label>
+            <label class="range-filter">
+              <span class="range-label">净利率</span>
+              <span class="range-inputs">
+                <input class="range-input" id="netMarginMinInput" type="number" step="0.01" inputmode="decimal" placeholder="最小" aria-label="净利率最小值">
+                <input class="range-input" id="netMarginMaxInput" type="number" step="0.01" inputmode="decimal" placeholder="最大" aria-label="净利率最大值">
+              </span>
+            </label>
+            <label class="range-filter">
+              <span class="range-label">市盈率(动)</span>
+              <span class="range-inputs">
+                <input class="range-input" id="peMinInput" type="number" step="0.01" inputmode="decimal" placeholder="最小" aria-label="市盈率动最小值">
+                <input class="range-input" id="peMaxInput" type="number" step="0.01" inputmode="decimal" placeholder="最大" aria-label="市盈率动最大值">
+              </span>
+            </label>
+            <label class="range-filter">
+              <span class="range-label">市净率</span>
+              <span class="range-inputs">
+                <input class="range-input" id="pbMinInput" type="number" step="0.01" inputmode="decimal" placeholder="最小" aria-label="市净率最小值">
+                <input class="range-input" id="pbMaxInput" type="number" step="0.01" inputmode="decimal" placeholder="最大" aria-label="市净率最大值">
+              </span>
+            </label>
+            <label class="range-filter">
+              <span class="range-label">总市值</span>
+              <span class="range-inputs">
+                <input class="range-input" id="marketValueMinInput" type="number" step="0.01" inputmode="decimal" placeholder="最小亿" aria-label="总市值最小值，单位亿">
+                <input class="range-input" id="marketValueMaxInput" type="number" step="0.01" inputmode="decimal" placeholder="最大亿" aria-label="总市值最大值，单位亿">
+              </span>
+            </label>
+          </div>
+          <button class="reset-button" id="resetButton" type="button">重置</button>
+        </div>
+      </section>
+
+      <section class="table-shell">
+        <div class="table-status">
+          <span id="rowStatus"></span>
+          <span id="sortStatus"></span>
+        </div>
+        <div class="table-wrap" id="tableWrap">
+          <table id="stockTable" aria-label="股票筛选结果表"></table>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer" id="footerText"></footer>
+  </div>
+
+  <script>
+    (() => {
+      const table = document.getElementById("stockTable");
+      const searchInput = document.getElementById("searchInput");
+      const rowStatus = document.getElementById("rowStatus");
+      const sortStatus = document.getElementById("sortStatus");
+      const resetButton = document.getElementById("resetButton");
+      const qoqThresholdInput = document.getElementById("qoqThresholdInput");
+      const yoyThresholdInput = document.getElementById("yoyThresholdInput");
+      const numericFilters = [
+        { id: "roe", keyPrefix: "ROE_WEIGHT", scale: 1, minInput: document.getElementById("roeMinInput"), maxInput: document.getElementById("roeMaxInput") },
+        { id: "grossMargin", keyPrefix: "XSMLL", scale: 1, minInput: document.getElementById("grossMarginMinInput"), maxInput: document.getElementById("grossMarginMaxInput") },
+        { id: "netMargin", keyPrefix: "XSJLL", scale: 1, minInput: document.getElementById("netMarginMinInput"), maxInput: document.getElementById("netMarginMaxInput") },
+        { id: "pe", key: "PE_DYNAMIC", scale: 1, minInput: document.getElementById("peMinInput"), maxInput: document.getElementById("peMaxInput") },
+        { id: "pb", key: "PB", scale: 1, minInput: document.getElementById("pbMinInput"), maxInput: document.getElementById("pbMaxInput") },
+        { id: "marketValue", key: "TOAL_MARKET_VALUE<140>", scale: 100000000, minInput: document.getElementById("marketValueMinInput"), maxInput: document.getElementById("marketValueMaxInput") },
+        { id: "yoy", titleIncludes: "同比增长率", scale: 1, minInput: yoyThresholdInput, maxInput: document.getElementById("yoyMaxInput"), live: true },
+        { id: "qoq", titleIncludes: "环比增长率", scale: 1, minInput: qoqThresholdInput, maxInput: document.getElementById("qoqMaxInput"), live: true }
+      ];
+      const liveNumericFilters = numericFilters.filter(filter => filter.live);
+      const localNumericFilters = numericFilters.filter(filter => !filter.live);
+      const eastmoneySearchApi = "https://np-tjxg-g.eastmoney.com/api/smart-tag/stock/v3/pw/search-code";
+      const eastmoneyQuoteApi = "https://push2.eastmoney.com/api/qt/ulist.np/get";
+      const livePageSize = 5000;
+      const quoteFields = "f12,f13,f14,f2,f20,f23,f115,f124";
+      const quoteBatchSize = 80;
+      const liveRefreshMs = 60 * 1000;
+      const sourceMeta = {
+        sourceUrl: "https://xuangu.eastmoney.com/Result?id=xc139baa1b02c2016458&a=edit_way&j=refreshUrl",
+        originalXcId: "xc139baa1b02c2016458",
+        resultXcId: "xc139bb2faf5c100ea5d"
+      };
+      const emptySource = {
+        ...sourceMeta,
+        query: "",
+        quoteTime: "",
+        searchCodeTime: "",
+        fetchedAt: "",
+        total: 0,
+        columns: [],
+        rows: [],
+        conditions: [],
+        traceInfo: null,
+        rawMeta: null
+      };
+      const realtimeQuoteKeys = ["NEWEST_PRICE", "PE_DYNAMIC", "PB", "TOAL_MARKET_VALUE<140>"];
+      const reportMetricPrefixes = ["ROE_WEIGHT", "XSMLL", "XSJLL"];
+      const realtimeQuoteColumnTemplates = {
+        NEWEST_PRICE: { title: "最新价", key: "NEWEST_PRICE", dateMsg: "", sortable: true, unit: "元" },
+        PE_DYNAMIC: { title: "市盈率(动)", key: "PE_DYNAMIC", dateMsg: "", sortable: true, unit: "倍" },
+        PB: { title: "市净率", key: "PB", dateMsg: "", sortable: true, unit: "倍" },
+        "TOAL_MARKET_VALUE<140>": { title: "总市值(日线不复权)", key: "TOAL_MARKET_VALUE<140>", dateMsg: "", sortable: true, unit: "元" }
+      };
+      const liveMetricQueryParts = [
+        "2026年半年报净资产收益率",
+        "2026年半年报毛利率",
+        "2026年半年报净利率"
+      ];
+      const hiddenKeys = new Set([
+        "MARKET_SHORT_NAME",
+        "MARKET_NUM",
+        "STOCK_FLAG_NUM",
+        "CHG",
+        "TRADEMARKET",
+        "IF_DELISTING",
+        "PCHG",
+        "PEAK_PRICE<140>",
+        "BOTTOM_PRICE<140>",
+        "TURNOVER_RATE",
+        "QRR",
+        "VOLUME",
+        "TRADING_VOLUMES",
+        "CIRCULATION_MARKET_VALUE<140>"
+      ]);
+      let activeSource = emptySource;
+      let dataStatus = { type: "loading", error: "" };
+      let sortState = { key: "SERIAL", direction: "asc" };
+      let rows = [];
+      let displayGroups = [];
+      let leafColumns = [];
+      let filterKeys = {};
+      let liveTimer = 0;
+      let liveRequestId = 0;
+
+      applyData(emptySource, { type: "loading", error: "" });
+      scheduleLiveUpdate(0);
+      window.setInterval(() => scheduleLiveUpdate(0), liveRefreshMs);
+
+      searchInput.addEventListener("input", render);
+      localNumericFilters.forEach(filter => {
+        [filter.minInput, filter.maxInput].forEach(input => {
+          if (input) input.addEventListener("input", render);
+        });
+      });
+      liveNumericFilters.forEach(filter => {
+        [filter.minInput, filter.maxInput].forEach(input => {
+          if (input) input.addEventListener("input", () => scheduleLiveUpdate());
+        });
+      });
+      resetButton.addEventListener("click", () => {
+        searchInput.value = "";
+        clearNumericFilters(localNumericFilters);
+        render();
+      });
+
+      function applyData(nextSource, status) {
+        activeSource = nextSource || emptySource;
+        dataStatus = status;
+        rows = Array.isArray(activeSource.rows) ? activeSource.rows.slice() : [];
+        displayGroups = buildDisplayGroups(activeSource.columns || []);
+        leafColumns = displayGroups.flatMap(group => group.children || [group.column]);
+        filterKeys = Object.fromEntries(numericFilters.map(filter => [filter.id, findFilterColumnKey(filter)]));
+        setMeta();
+        render();
+      }
+
+      async function enrichRealtimeQuoteData(source) {
+        if (!source || !Array.isArray(source.rows) || !source.rows.length) return source;
+        const sourceWithRealtimeDates = applyRealtimeColumnDates(source, source.realtimeQuoteTime || source.quoteTime || source.searchCodeTime);
+        const quoteData = await fetchRealtimeQuotes(sourceWithRealtimeDates.rows);
+        if (!quoteData || !Array.isArray(quoteData.rows) || !quoteData.rows.length) return sourceWithRealtimeDates;
+        return mergeRealtimeQuoteData(sourceWithRealtimeDates, quoteData);
+      }
+
+      function applyRealtimeColumnDates(source, dateText) {
+        if (!source || !dateText) return source;
+        return {
+          ...source,
+          columns: (source.columns || []).map(column => applyRealtimeColumnDate(column, dateText))
+        };
+      }
+
+      function applyRealtimeColumnDate(column, dateText) {
+        if (!column) return column;
+        if (Array.isArray(column.children)) {
+          return { ...column, children: column.children.map(child => applyRealtimeColumnDate(child, dateText)) };
+        }
+        return realtimeQuoteKeys.includes(column.key) ? { ...column, dateMsg: dateText } : column;
+      }
+
+      async function fetchRealtimeQuotes(sourceRows) {
+        if (!(location.protocol === "http:" || location.protocol === "https:")) return null;
+        const securities = uniqueSecurities(sourceRows);
+        if (!securities.length) return null;
+        return requestEastmoneyQuotes(securities);
+      }
+
+      function mergeRealtimeQuoteData(source, quoteData) {
+        const quotesByCode = new Map(quoteData.rows.map(row => [String(row.code || ""), row]));
+        const quoteDateTime = quoteData.quoteTime || source.realtimeQuoteTime || source.quoteTime || source.searchCodeTime || quoteData.quoteMinute || "";
+        const existingKeys = new Set((source.columns || []).map(column => column.key));
+        const quoteColumns = realtimeQuoteKeys
+          .filter(key => !existingKeys.has(key))
+          .map(key => {
+            const template = realtimeQuoteColumnTemplates[key];
+            return template ? { ...template, dateMsg: quoteDateTime || template.dateMsg } : null;
+          })
+          .filter(Boolean);
+        const mergedColumns = (source.columns || [])
+          .map(column => realtimeQuoteKeys.includes(column.key) ? { ...column, dateMsg: quoteDateTime || column.dateMsg } : column)
+          .concat(quoteColumns);
+        const mergedRows = source.rows.map(row => {
+          const quote = quotesByCode.get(String(row.SECURITY_CODE || ""));
+          if (!quote) return row;
+          const mergedRow = { ...row };
+          if (isUsableQuoteValue(quote.newestPrice)) mergedRow.NEWEST_PRICE = formatRealtimeNumber(quote.newestPrice);
+          if (isUsableQuoteValue(quote.peDynamic)) mergedRow.PE_DYNAMIC = formatRealtimeNumber(quote.peDynamic);
+          if (isUsableQuoteValue(quote.pb)) mergedRow.PB = formatRealtimeNumber(quote.pb);
+          if (isUsableQuoteValue(quote.totalMarketValue)) mergedRow["TOAL_MARKET_VALUE<140>"] = formatMarketValue(quote.totalMarketValue);
+          return mergedRow;
+        });
+        return {
+          ...source,
+          quoteTime: quoteData.quoteTime || source.quoteTime,
+          realtimeQuoteTime: quoteData.quoteTime || "",
+          columns: mergedColumns,
+          rows: mergedRows
+        };
+      }
+
+      function uniqueSecurities(sourceRows) {
+        const seen = new Set();
+        return sourceRows.reduce((result, row) => {
+          const code = String(row.SECURITY_CODE || "").trim();
+          if (!/^\d{6}$/.test(code) || seen.has(code)) return result;
+          seen.add(code);
+          result.push({ code, market: marketCodeForRow(row) });
+          return result;
+        }, []);
+      }
+
+      function marketCodeForRow(row) {
+        const market = String(row.MARKET_NUM || "").trim();
+        if (market === "0" || market === "1") return market;
+        return String(row.SECURITY_CODE || "").startsWith("6") ? "1" : "0";
+      }
+
+      function isUsableQuoteValue(value) {
+        return value !== null && value !== undefined && value !== "" && value !== "-";
+      }
+
+      function formatRealtimeNumber(value) {
+        return typeof value === "number" ? String(value) : String(value || "-");
+      }
+
+      async function requestEastmoneyQuotes(securities) {
+        const rows = [];
+        let latestUpdatedAt = 0;
+        for (let index = 0; index < securities.length; index += quoteBatchSize) {
+          const batch = securities.slice(index, index + quoteBatchSize);
+          const secids = batch.map(item => `${item.market}.${item.code}`).join(",");
+          const url = `${eastmoneyQuoteApi}?fltt=2&invt=2&fields=${quoteFields}&secids=${encodeURIComponent(secids)}`;
+          const response = await fetch(url, {
+            headers: {
+              "Accept": "application/json, text/plain, */*"
+            }
+          });
+          const apiData = await response.json();
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const diff = apiData && apiData.data && apiData.data.diff;
+          if (!Array.isArray(diff)) throw new Error((apiData && apiData.msg) || "行情接口未返回数据");
+          diff.forEach(item => {
+            const updatedAt = Number(item.f124) || 0;
+            if (updatedAt > latestUpdatedAt) latestUpdatedAt = updatedAt;
+            rows.push({
+              code: String(item.f12 || ""),
+              market: String(item.f13 ?? ""),
+              name: item.f14 || "",
+              newestPrice: item.f2,
+              totalMarketValue: item.f20,
+              pb: item.f23,
+              peDynamic: item.f115,
+              updatedAt
+            });
+          });
+        }
+        return {
+          quoteTime: latestUpdatedAt ? formatQuoteDateTime(latestUpdatedAt) : "",
+          quoteMinute: latestUpdatedAt ? formatQuoteMinute(latestUpdatedAt) : "",
+          rows
+        };
+      }
+
+      function formatMarketValue(value) {
+        const number = Number(value);
+        if (!Number.isFinite(number)) return String(value || "-");
+        if (Math.abs(number) >= 1e12) return `${trimFixed(number / 1e12)}万亿`;
+        if (Math.abs(number) >= 1e8) return `${trimFixed(number / 1e8)}亿`;
+        if (Math.abs(number) >= 1e4) return `${trimFixed(number / 1e4)}万`;
+        return trimFixed(number);
+      }
+
+      function trimFixed(value) {
+        return Number(value).toFixed(2).replace(/\.?0+$/, "");
+      }
+
+      function formatQuoteDateTime(epochSeconds) {
+        const parts = quoteTimeParts(epochSeconds);
+        return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
+      }
+
+      function formatQuoteMinute(epochSeconds) {
+        const parts = quoteTimeParts(epochSeconds);
+        return `${parts.hour}:${parts.minute}`;
+      }
+
+      function quoteTimeParts(epochSeconds) {
+        const date = new Date(Number(epochSeconds) * 1000);
+        const parts = new Intl.DateTimeFormat("zh-CN", {
+          timeZone: "Asia/Shanghai",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false
+        }).formatToParts(date);
+        return Object.fromEntries(parts.filter(part => part.type !== "literal").map(part => [part.type, part.value]));
+      }
+
+      function setMeta() {
+        document.getElementById("totalCount").textContent = String(activeSource.total || rows.length);
+        document.getElementById("quoteTime").textContent = activeSource.quoteTime || activeSource.searchCodeTime || "-";
+        document.getElementById("sourceId").textContent = activeSource.originalXcId || activeSource.resultXcId || sourceMeta.originalXcId || "-";
+        document.getElementById("sourceLink").href = activeSource.sourceUrl || sourceMeta.sourceUrl || "#";
+        const timeText = activeSource.searchCodeTime || activeSource.quoteTime || "-";
+        const sourceText = "东方财富实时数据";
+        const errorText = dataStatus.error ? `；实时数据加载失败：${dataStatus.error}` : "";
+        document.getElementById("footerText").textContent =
+          `${sourceText}；结果刷新时间：${timeText}${errorText}`;
+      }
+
+      function buildDisplayGroups(columns) {
+        const groups = columns.reduce((result, column) => {
+          if (isHiddenColumn(column)) return result;
+          if (Array.isArray(column.children) && column.children.length) {
+            const children = column.children.filter(child => !isHiddenColumn(child));
+            if (children.length) result.push({ title: column.title, children });
+          } else {
+            result.push({ title: column.title, column });
+          }
+          return result;
+        }, []);
+        return orderDisplayGroups(groupGrowthRateColumns(groupReportMetricColumns(groupRealtimeQuoteColumns(groupContractLiabilityColumns(groups)))));
+      }
+
+      function groupContractLiabilityColumns(groups) {
+        if (groups.some(group => group.title === "合同负债" && Array.isArray(group.children) && group.children.length)) {
+          return groups;
+        }
+        const contractChildren = [];
+        const orderedGroups = [];
+        let insertAt = -1;
+        groups.forEach(group => {
+          const columns = group.children || [group.column];
+          const isContractGroup = columns.length && columns.every(column => isContractLiabilityKey(column.key));
+          if (isContractGroup) {
+            if (insertAt < 0) insertAt = orderedGroups.length;
+            contractChildren.push(...columns);
+            return;
+          }
+          orderedGroups.push(group);
+        });
+        if (!contractChildren.length) return groups;
+        const contractGroup = {
+          title: "合同负债",
+          children: contractChildren
+        };
+        const safeInsertAt = insertAt < 0 ? orderedGroups.length : insertAt;
+        orderedGroups.splice(safeInsertAt, 0, contractGroup);
+        return orderedGroups;
+      }
+
+      function isContractLiabilityKey(key) {
+        return String(key || "").startsWith("CONTRACTLIAB");
+      }
+
+      function groupRealtimeQuoteColumns(groups) {
+        const quoteColumns = [];
+        const otherGroups = [];
+        groups.forEach(group => {
+          if (!group.children && group.column && realtimeQuoteKeys.includes(group.column.key)) {
+            quoteColumns.push(group.column);
+            return;
+          }
+          otherGroups.push(group);
+        });
+        if (!quoteColumns.length) return groups;
+        const children = realtimeQuoteKeys
+          .map(key => quoteColumns.find(column => column.key === key))
+          .filter(Boolean);
+        return [
+          ...otherGroups,
+          {
+            title: realtimeQuoteGroupTitle(children),
+            children,
+            childLabelMode: "title"
+          }
+        ];
+      }
+
+      function groupReportMetricColumns(groups) {
+        const metricColumns = [];
+        const otherGroups = [];
+        groups.forEach(group => {
+          if (!group.children && group.column && isReportMetricColumn(group.column.key)) {
+            metricColumns.push(group.column);
+            return;
+          }
+          otherGroups.push(group);
+        });
+        if (!metricColumns.length) return groups;
+        const children = reportMetricPrefixes
+          .map(prefix => metricColumns.find(column => String(column.key || "").startsWith(prefix)))
+          .filter(Boolean);
+        if (!children.length) return groups;
+        return [
+          ...otherGroups,
+          {
+            title: latestReportMetricGroupTitle(children),
+            children,
+            childLabelMode: "title"
+          }
+        ];
+      }
+
+      function groupGrowthRateColumns(groups) {
+        const growthColumns = [];
+        const otherGroups = [];
+        groups.forEach(group => {
+          if (!group.children && group.column && isGrowthRateColumn(group.column.key)) {
+            growthColumns.push(group.column);
+            return;
+          }
+          otherGroups.push(group);
+        });
+        if (!growthColumns.length) return groups;
+        const children = growthColumns
+          .filter(column => column)
+          .sort((a, b) => displayOrderForKey(a.key) - displayOrderForKey(b.key));
+        return [
+          ...otherGroups,
+          {
+            title: latestReportMetricGroupTitle(children),
+            children,
+            childLabelMode: "title"
+          }
+        ];
+      }
+
+      function realtimeQuoteGroupTitle(columns) {
+        return activeSource.realtimeQuoteTime ||
+          activeSource.quoteTime ||
+          activeSource.searchCodeTime ||
+          (columns.find(column => headerSubtitle(column)) || {}).dateMsg ||
+          "行情时间";
+      }
+
+      function isHiddenColumn(column) {
+        if (!column || column.hiddenNeed) return true;
+        return hiddenKeys.has(column.key) || String(column.key || "").startsWith("IFSTSTOCK");
+      }
+
+      function orderDisplayGroups(groups) {
+        return groups
+          .map((group, index) => ({ group, index, priority: displayOrderForGroup(group) }))
+          .sort((a, b) => a.priority - b.priority || a.index - b.index)
+          .map(item => item.group);
+      }
+
+      function displayOrderForGroup(group) {
+        const columns = group.children || [group.column];
+        return columns.reduce((priority, column) => Math.min(priority, displayOrderForKey(column.key)), 1000);
+      }
+
+      function displayOrderForKey(key) {
+        if (key === "SERIAL") return 0;
+        if (key === "SECURITY_CODE") return 1;
+        if (key === "SECURITY_SHORT_NAME") return 2;
+        if (key === "NEWEST_PRICE") return 3;
+        if (key === "PE_DYNAMIC") return 4;
+        if (key === "PB") return 5;
+        if (key === "TOAL_MARKET_VALUE<140>") return 6;
+        if (String(key || "").startsWith("ROE_WEIGHT")) return 7;
+        if (String(key || "").startsWith("XSMLL")) return 8;
+        if (String(key || "").startsWith("XSJLL")) return 9;
+        if (String(key || "").includes("同比增长率")) return 10;
+        if (String(key || "").includes("环比增长率")) return 11;
+        return 1000;
+      }
+
+      function getFilteredRows() {
+        const keyword = searchInput.value.trim().toLowerCase();
+        return rows.filter(row => {
+          if (!passesNumericFilters(row)) return false;
+          if (!keyword) return true;
+          const haystack = [row.SECURITY_CODE, row.SECURITY_SHORT_NAME].join(" ").toLowerCase();
+          return haystack.includes(keyword);
+        }).sort((a, b) => compareRows(a, b));
+      }
+
+      function findFilterColumnKey(filter) {
+        const column = findFilterColumn(filter, activeSource);
+        return column ? column.key : "";
+      }
+
+      function findFilterColumn(filter, source) {
+        const columns = (source && source.columns) || [];
+        if (filter.key) return columns.find(item => item.key === filter.key) || null;
+        const column = columns.find(item => {
+          const key = String(item.key || "");
+          const title = String(item.title || "");
+          if (filter.keyPrefix && key.startsWith(filter.keyPrefix)) return true;
+          if (filter.titleIncludes && (key.includes(filter.titleIncludes) || title.includes(filter.titleIncludes))) return true;
+          return false;
+        });
+        return column || null;
+      }
+
+      function readThreshold(input) {
+        const raw = input.value.trim();
+        if (!raw) return null;
+        const value = Number(raw);
+        return Number.isFinite(value) ? value : null;
+      }
+
+      function passesNumericFilters(row) {
+        return localNumericFilters.every(filter => {
+          const key = filterKeys[filter.id];
+          const min = readThreshold(filter.minInput);
+          const max = readThreshold(filter.maxInput);
+          if (!key || (min === null && max === null)) return true;
+          const value = numericValue(valueForNumericFilter(row, filter, key));
+          if (Number.isNaN(value)) return false;
+          if (min !== null && value < min * filter.scale) return false;
+          if (max !== null && value > max * filter.scale) return false;
+          return true;
+        });
+      }
+
+      function valueForNumericFilter(row, filter, key) {
+        return row[key];
+      }
+
+      function clearNumericFilters(filters = numericFilters) {
+        filters.forEach(filter => {
+          if (filter.minInput) filter.minInput.value = "";
+          if (filter.maxInput) filter.maxInput.value = "";
+        });
+      }
+
+      function scheduleLiveUpdate(delay = 550) {
+        window.clearTimeout(liveTimer);
+        liveTimer = window.setTimeout(refreshLiveData, delay);
+      }
+
+      async function refreshLiveData() {
+        const requestId = ++liveRequestId;
+        const query = buildLiveQuery();
+        try {
+          const liveSource = await fetchLiveSource(query);
+          if (requestId !== liveRequestId) return;
+          applyData(liveSource, { type: "live", error: "" });
+        } catch (error) {
+          if (requestId !== liveRequestId) return;
+          applyData(emptySource, { type: "error", error: cleanError(error) });
+        }
+      }
+
+      async function fetchLiveSource(query) {
+        const apiData = await requestEastmoney(query);
+        return enrichRealtimeQuoteData(normalizeEastmoneyResponse(apiData, query));
+      }
+
+      async function requestEastmoney(query) {
+        const response = await fetch(eastmoneySearchApi, {
+          method: "POST",
+          headers: {
+            "Accept": "application/json, text/plain, */*",
+            "Content-Type": "application/json;charset=UTF-8"
+          },
+          body: JSON.stringify(buildEastmoneyRequest(query))
+        });
+        const apiData = await response.json();
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return apiData;
+      }
+
+      function buildEastmoneyRequest(query) {
+        return {
+          ownSelectAll: false,
+          allCode: false,
+          calcAvgChg: false,
+          keywordNew: query,
+          pageSize: livePageSize,
+          pageNo: 1,
+          fingerprint: "local-static-page",
+          gids: [],
+          timestamp: Date.now(),
+          requestId: createRequestId(),
+          shareToGuba: false,
+          dxInfoNew: [],
+          extraCondition: null,
+          ignoreRightsField: false,
+          customDataNew: "",
+          needAmbiguousSuggest: false,
+          notExecuteCompute: false,
+          client: "WEB"
+        };
+      }
+
+      function buildLiveQuery() {
+        const parts = [
+          growthCondition("合同负债环比增长", qoqThresholdInput, document.getElementById("qoqMaxInput")),
+          growthCondition("合同负债同比增长", yoyThresholdInput, document.getElementById("yoyMaxInput")),
+          ...liveMetricQueryParts,
+          "不要ST股及不要退市股",
+          "不要北交所"
+        ];
+        return `${parts.join(";")};`;
+      }
+
+      function growthCondition(label, minInput, maxInput) {
+        const minText = thresholdQueryText(minInput);
+        const maxText = thresholdQueryText(maxInput);
+        if (minText && maxText) return `${label}${minText}%到${maxText}%`;
+        if (minText) return `${label}${minText}%`;
+        if (maxText) return `${label}小于${maxText}%`;
+        return label;
+      }
+
+      function thresholdQueryText(input) {
+        const raw = input.value.trim();
+        return raw && Number.isFinite(Number(raw)) ? raw : "";
+      }
+
+      function normalizeEastmoneyResponse(apiData, query) {
+        const payload = apiData && apiData.data;
+        const result = payload && payload.result;
+        const apiRows = result && (result.dataList || result.rows || result.list);
+        if (!result || !Array.isArray(apiRows) || !Array.isArray(result.columns)) {
+          throw new Error((apiData && apiData.msg) || "接口未返回表格数据");
+        }
+        const resultXcId = payload.xcId || sourceMeta.resultXcId;
+        return {
+          sourceUrl: resultXcId ? `https://xuangu.eastmoney.com/Result?id=${resultXcId}&a=edit_way&j=refreshUrl` : sourceMeta.sourceUrl,
+          originalXcId: sourceMeta.originalXcId,
+          resultXcId,
+          query,
+          quoteTime: payload.quoteTime || result.quoteTime || "",
+          searchCodeTime: payload.searchCodeTime || payload.quoteTime || "",
+          fetchedAt: new Date().toISOString(),
+          total: result.total || apiRows.length,
+          columns: result.columns,
+          rows: apiRows.map((row, index) => ({ ...row, SERIAL: String(index + 1) })),
+          conditions: payload.responseConditionList || [],
+          traceInfo: payload.traceInfo || null,
+          rawMeta: result.meta || null
+        };
+      }
+
+      function createRequestId() {
+        const chars = "0123456789abcdef";
+        let id = "";
+        for (let i = 0; i < 32; i += 1) id += chars[Math.floor(Math.random() * chars.length)];
+        return id;
+      }
+
+      function cleanError(error) {
+        const message = String(error && error.message ? error.message : error).replace(/\s+/g, " ");
+        if (/JSON parse error|Failed to fetch|Content type|NetworkError|CORS|HTTP/i.test(message)) return "接口暂时不可用";
+        return message.slice(0, 90);
+      }
+
+      function compareRows(a, b) {
+        const key = sortState.key;
+        const direction = sortState.direction === "desc" ? -1 : 1;
+        const av = a[key];
+        const bv = b[key];
+        const an = numericValue(av);
+        const bn = numericValue(bv);
+        if (!Number.isNaN(an) && !Number.isNaN(bn) && an !== bn) return (an - bn) * direction;
+        return String(av || "").localeCompare(String(bv || ""), "zh-CN", { numeric: true }) * direction;
+      }
+
+      function render() {
+        const filtered = getFilteredRows();
+        table.innerHTML = `${renderHeader()}${renderBody(filtered)}`;
+        rowStatus.innerHTML = dataStatus.type === "loading" && !rows.length
+          ? "正在获取东方财富实时数据..."
+          : dataStatus.error
+            ? `实时数据加载失败：${escapeHtml(dataStatus.error)}`
+            : `显示 <span class="status-strong">${filtered.length}</span> / ${rows.length} 只股票`;
+        const sortColumn = leafColumns.find(column => column.key === sortState.key);
+        sortStatus.textContent = sortColumn ? `${displayTitle(sortColumn)} ${sortState.direction === "desc" ? "降序" : "升序"}` : "";
+        table.querySelectorAll("[data-sort-key]").forEach(button => {
+          button.addEventListener("click", () => sortBy(button.dataset.sortKey));
+        });
+      }
+
+      function renderHeader() {
+        const firstRow = [];
+        const secondRow = [];
+        displayGroups.forEach(group => {
+          if (group.children) {
+            firstRow.push(`<th class="group-head" colspan="${group.children.length}"><div class="group-head-inner">${escapeHtml(group.title)}</div></th>`);
+            group.children.forEach(column => {
+              secondRow.push(renderHeaderCell(column, false, group.childLabelMode || "subtitle"));
+            });
+          } else {
+            firstRow.push(renderHeaderCell(group.column, true, ""));
+          }
+        });
+        return `<thead><tr>${firstRow.join("")}</tr><tr>${secondRow.join("")}</tr></thead>`;
+      }
+
+      function renderHeaderCell(column, rowSpan, childLabelMode) {
+        const stickyClass = stickyClassFor(column.key);
+        const widthClass = widthClassFor(column.key);
+        const mark = sortState.key === column.key ? `<span class="sort-mark">${sortState.direction === "desc" ? "↓" : "↑"}</span>` : "";
+        const cleanTitle = displayTitle(column);
+        const subtitle = headerSubtitle(column);
+        const label = childLabelMode === "title" ? cleanTitle : (childLabelMode ? (subtitle || cleanTitle) : cleanTitle);
+        const date = childLabelMode ? "" : subtitle;
+        return `
+          <th class="${stickyClass} ${widthClass}" ${rowSpan ? 'rowspan="2"' : ""}>
+            <button class="th-button" type="button" data-sort-key="${escapeAttr(column.key)}" title="${escapeAttr(cleanTitle)}">
+              <span class="th-title">${escapeHtml(label)}${mark}</span>
+              ${date ? `<span class="th-date">${escapeHtml(date)}</span>` : ""}
+            </button>
+          </th>`;
+      }
+
+      function renderBody(data) {
+        if (!data.length) {
+          const message = dataStatus.type === "loading"
+            ? "正在获取东方财富实时数据..."
+            : dataStatus.error
+              ? `实时数据加载失败：${dataStatus.error}`
+              : "没有匹配的股票。";
+          return `<tbody><tr><td class="empty-state" colspan="${Math.max(1, leafColumns.length)}">${escapeHtml(message)}</td></tr></tbody>`;
+        }
+        const html = data.map(row => {
+          const cells = leafColumns.map(column => renderCell(row, column)).join("");
+          return `<tr>${cells}</tr>`;
+        }).join("");
+        return `<tbody>${html}</tbody>`;
+      }
+
+      function renderCell(row, column) {
+        const key = column.key;
+        const stickyClass = stickyClassFor(key);
+        const widthClass = widthClassFor(key);
+        const alignClass = alignClassFor(key);
+        const toneClass = toneClassFor(row[key], column);
+        const content = formatValue(row[key], column);
+        return `<td class="${stickyClass} ${widthClass} ${alignClass} ${toneClass}">${content}</td>`;
+      }
+
+      function formatValue(value, column) {
+        if (value === null || value === undefined || value === "") return "-";
+        if (column.key === "SECURITY_CODE") return `<span class="stock-code">${escapeHtml(value)}</span>`;
+        if (column.key === "SECURITY_SHORT_NAME") return `<span class="stock-name">${escapeHtml(value)}</span>`;
+        const parts = String(value).split("|");
+        let main = parts[0] || "-";
+        if (column.unit === "%" && main !== "-" && !main.includes("%")) main = `${main}%`;
+        if (shouldHideReportSuffix(column)) return `<span class="cell-main">${escapeHtml(main)}</span>`;
+        const sub = parts.slice(1).join(" ");
+        return `<span class="cell-main">${escapeHtml(main)}</span>${sub ? `<span class="cell-sub">${escapeHtml(sub)}</span>` : ""}`;
+      }
+
+      function sortBy(key) {
+        if (sortState.key === key) {
+          sortState.direction = sortState.direction === "asc" ? "desc" : "asc";
+        } else {
+          sortState = { key, direction: "desc" };
+        }
+        render();
+      }
+
+      function displayTitle(column) {
+        if (column.key === "TOAL_MARKET_VALUE<140>") return "总市值";
+        if (column.key === "PE_DYNAMIC") return "市盈率(动)";
+        if (column.key === "PB") return "市净率";
+        if (String(column.key || "").includes("同比增长率")) return "合同负债同比增长率";
+        if (String(column.key || "").includes("环比增长率")) return "合同负债环比增长率";
+        if (String(column.key || "").startsWith("XSMLL")) return "毛利率";
+        if (String(column.key || "").startsWith("XSJLL")) return "净利率";
+        if (String(column.key || "").startsWith("ROE_WEIGHT")) return "净资产收益率";
+        return column.title;
+      }
+
+      function headerSubtitle(column) {
+        if (isReportMetricColumn(column.key)) return reportPeriodForColumn(column.key) || column.dateMsg;
+        return column.dateMsg;
+      }
+
+      function isReportMetricColumn(key) {
+        const value = String(key || "");
+        return reportMetricPrefixes.some(prefix => value.startsWith(prefix));
+      }
+
+      function shouldHideReportSuffix(column) {
+        return isReportMetricColumn(column.key) || isGrowthRateColumn(column.key);
+      }
+
+      function isGrowthRateColumn(key) {
+        const value = String(key || "");
+        return value.includes("同比增长率") || value.includes("环比增长率");
+      }
+
+      function reportPeriodForColumn(key) {
+        const sourceRows = rows;
+        const row = sourceRows.find(item => String(item[key] || "").includes("|"));
+        if (!row) return "";
+        return formatReportPeriod(String(row[key]).split("|").slice(1).join(" "));
+      }
+
+      function latestReportMetricGroupTitle(columns) {
+        const latest = columns.reduce((result, column) => {
+          const candidate = parseReportDateValue(reportDateTitleText(column));
+          if (!candidate) return result;
+          if (!result || candidate.time > result.time) return candidate;
+          return result;
+        }, null);
+        if (latest) return latest.title;
+        return parseReportDateValue(reportDateTitleText(columns[0]))?.title ||
+          formatReportDateTitle(reportDateTitleText(columns[0])) ||
+          "报表时间";
+      }
+
+      function reportDateTitleText(column) {
+        if (!column) return "";
+        return column.dateMsg || reportDateFromKey(column.key) || "";
+      }
+
+      function reportDateFromKey(key) {
+        const match = String(key || "").match(/\{(\d{4})-(\d{2})-(\d{2})\}/);
+        if (!match) return "";
+        return `${match[1]}.${match[2]}.${match[3]}`;
+      }
+
+      function parseReportDateValue(value) {
+        const text = String(value || "").trim();
+        const match = text.match(/(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
+        if (!match) return null;
+        const time = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+        return {
+          time,
+          title: formatReportDateTitle(text)
+        };
+      }
+
+      function formatReportDateTitle(value) {
+        const text = String(value || "").trim();
+        const match = text.match(/(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
+        if (match) {
+          return `${match[1]}.${Number(match[2])}.${Number(match[3])}`;
+        }
+        return text;
+      }
+
+      function formatReportPeriod(value) {
+        const text = value.trim();
+        const match = text.match(/^(\d{4})(.+)$/);
+        return match ? `${match[1]}年 ${match[2].trim()}` : text;
+      }
+
+      function stickyClassFor(key) {
+        if (key === "SERIAL") return "sticky-col sticky-serial";
+        if (key === "SECURITY_CODE") return "sticky-col sticky-code";
+        if (key === "SECURITY_SHORT_NAME") return "sticky-col sticky-name";
+        return "";
+      }
+
+      function widthClassFor(key) {
+        if (["SERIAL", "SECURITY_CODE", "SECURITY_SHORT_NAME"].includes(key)) return "";
+        if (realtimeQuoteKeys.includes(key)) return "col-realtime";
+        if (key === "CHG") return "col-change";
+        if (key === "PCHG") return "col-pchg";
+        if (key === "TRADEMARKET") return "col-market";
+        if (key.includes("同比增长率") || key.includes("环比增长率")) return "col-growth";
+        if (key.startsWith("CONTRACTLIAB")) return "col-contract";
+        if (key.startsWith("IFSTSTOCK")) return "col-st";
+        if (key === "IF_DELISTING") return "col-delisting";
+        return "col-wide";
+      }
+
+      function alignClassFor(key) {
+        if (["SECURITY_CODE", "SECURITY_SHORT_NAME", "TRADEMARKET", "IF_DELISTING"].includes(key) || key.startsWith("IFSTSTOCK")) return "text-center";
+        if (key === "SERIAL") return "text-center";
+        return "";
+      }
+
+      function toneClassFor(value, column) {
+        if (!column.redGreenAble) return "";
+        const numeric = numericValue(value);
+        if (Number.isNaN(numeric) || numeric === 0) return "";
+        return numeric > 0 ? "value-up" : "value-down";
+      }
+
+      function numericValue(value) {
+        if (value === null || value === undefined) return NaN;
+        const raw = String(value).split("|")[0].replace(/,/g, "").trim();
+        if (!raw || raw === "-") return NaN;
+        const match = raw.match(/-?\d+(?:\.\d+)?/);
+        if (!match) return NaN;
+        let number = Number(match[0]);
+        if (raw.includes("万亿")) number *= 1e12;
+        else if (raw.includes("亿")) number *= 1e8;
+        else if (raw.includes("万")) number *= 1e4;
+        return number;
+      }
+
+      function escapeHtml(value) {
+        return String(value).replace(/[&<>"']/g, char => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;"
+        }[char]));
+      }
+
+      function escapeAttr(value) {
+        return escapeHtml(value).replace(/`/g, "&#96;");
+      }
+    })();
+  </script>
+</body>
+</html>
