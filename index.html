@@ -1876,7 +1876,7 @@
           "不要ST股及不要退市股",
           "不要北交所"
         ];
-        return `${parts.join(";")};`;
+        return `${parts.filter(Boolean).join(";")};`;
       }
 
       function growthCondition(label, minInput, maxInput) {
@@ -1885,7 +1885,7 @@
         if (minText && maxText) return `${label}${minText}%到${maxText}%`;
         if (minText) return `${label}${minText}%`;
         if (maxText) return `${label}小于${maxText}%`;
-        return label;
+        return "";
       }
 
       function thresholdQueryText(input) {
