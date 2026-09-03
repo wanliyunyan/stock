@@ -434,6 +434,12 @@
       font-weight: 650;
     }
 
+    .stock-code:hover,
+    .stock-code:focus-visible,
+    .stock-name:hover {
+      text-decoration: underline;
+    }
+
     tbody tr[data-stock-code] {
       cursor: default;
     }
@@ -1308,6 +1314,16 @@
         return String(row["SECURITY_CODE"] || "").startsWith("6") ? "1" : "0";
       }
 
+      function marketPrefixForRow(row) {
+        return marketCodeForRow(row) === "1" ? "sh" : "sz";
+      }
+
+      function quoteDetailUrlForRow(row) {
+        const code = String(row && row["SECURITY_CODE"] || "").trim();
+        if (!/^\d{6}$/.test(code)) return "";
+        return `https://quote.eastmoney.com/concept/${marketPrefixForRow(row)}${code}.html`;
+      }
+
       function isUsableQuoteValue(value) {
         return value !== null && value !== undefined && value !== "" && value !== "-";
       }
@@ -1907,41 +1923,29 @@
 
       function attachChartPreviewEvents() {
         const previewEnter = event => {
-          const row = stockRowFromTarget(event.target);
-          if (!row) return;
-          const previousRow = stockRowFromTarget(event.relatedTarget);
-          if (previousRow === row) return;
-          queueChartPreview(row, event, false);
+          const preview = stockPreviewTargetFromEvent(event);
+          if (!preview) return;
+          const previousTarget = stockPreviewNameTargetFromTarget(event.relatedTarget);
+          if (previousTarget === preview.target) return;
+          queueChartPreview(preview.row, event, false);
         };
         const previewMove = event => {
-          const row = stockRowFromTarget(event.target);
-          if (!row || row !== chartState.rowElement) return;
+          const preview = stockPreviewTargetFromEvent(event);
+          if (!preview || preview.row !== chartState.rowElement) return;
           chartState.pointerX = event.clientX;
           chartState.pointerY = event.clientY;
-          placeChartPopover(row);
+          placeChartPopover(preview.row);
         };
         const previewLeave = event => {
-          const row = stockRowFromTarget(event.target);
-          if (!row) return;
-          const nextRow = stockRowFromTarget(event.relatedTarget);
-          if (nextRow === row || (event.relatedTarget && chartPopover.contains(event.relatedTarget))) return;
+          const target = stockPreviewNameTargetFromTarget(event.target);
+          if (!target) return;
+          const nextTarget = stockPreviewNameTargetFromTarget(event.relatedTarget);
+          if (nextTarget === target || (event.relatedTarget && chartPopover.contains(event.relatedTarget))) return;
           scheduleHideChartPreview();
         };
         ["pointerover", "mouseover"].forEach(type => table.addEventListener(type, previewEnter));
         ["pointermove", "mousemove"].forEach(type => table.addEventListener(type, previewMove));
         ["pointerout", "mouseout"].forEach(type => table.addEventListener(type, previewLeave));
-        table.addEventListener("focusin", event => {
-          const row = stockRowFromTarget(event.target);
-          if (row) queueChartPreview(row, event, true);
-        });
-        table.addEventListener("focusout", event => {
-          if (event.relatedTarget && chartPopover.contains(event.relatedTarget)) return;
-          scheduleHideChartPreview();
-        });
-        table.addEventListener("click", event => {
-          const row = stockRowFromTarget(event.target);
-          if (row) queueChartPreview(row, event, true);
-        });
         chartPeriodButtons.forEach(button => {
           button.addEventListener("click", () => {
             const period = button.dataset.chartPeriod;
@@ -1964,6 +1968,19 @@
         document.addEventListener("keydown", event => {
           if (event.key === "Escape") hideChartPreview();
         });
+      }
+
+      function stockPreviewTargetFromEvent(event) {
+        const target = stockPreviewNameTargetFromTarget(event && event.target);
+        if (!target) return null;
+        const row = stockRowFromTarget(target);
+        return row ? { row, target } : null;
+      }
+
+      function stockPreviewNameTargetFromTarget(target) {
+        if (!target || typeof target.closest !== "function") return null;
+        const nameTarget = target.closest('[data-chart-preview-target="name"]');
+        return nameTarget && table.contains(nameTarget) ? nameTarget : null;
       }
 
       function cancelHideChartPreview() {
@@ -2475,7 +2492,7 @@
           const stockName = String(row["SECURITY_SHORT_NAME"] || "").trim();
           const market = marketCodeForRow(row);
           const rowAttrs = stockCode
-            ? ` data-stock-code="${escapeAttr(stockCode)}" data-stock-market="${escapeAttr(market)}" data-stock-name="${escapeAttr(stockName)}" tabindex="0"`
+            ? ` data-stock-code="${escapeAttr(stockCode)}" data-stock-market="${escapeAttr(market)}" data-stock-name="${escapeAttr(stockName)}"`
             : "";
           return `<tr${rowAttrs}>${cells}</tr>`;
         }).join("");
@@ -2488,14 +2505,20 @@
         const widthClass = widthClassFor(key);
         const alignClass = alignClassFor(key);
         const toneClass = toneClassFor(row[key], column);
-        const content = formatValue(row[key], column);
+        const content = formatValue(row[key], column, row);
         return `<td class="${stickyClass} ${widthClass} ${alignClass} ${toneClass}">${content}</td>`;
       }
 
-      function formatValue(value, column) {
+      function formatValue(value, column, row) {
         if (value === null || value === undefined || value === "") return "-";
-        if (column.key === "SECURITY_CODE") return `<span class="stock-code">${escapeHtml(value)}</span>`;
-        if (column.key === "SECURITY_SHORT_NAME") return `<span class="stock-name">${escapeHtml(value)}</span>`;
+        if (column.key === "SECURITY_CODE") {
+          const detailUrl = quoteDetailUrlForRow(row);
+          const codeText = escapeHtml(value);
+          return detailUrl
+            ? `<a class="stock-code" href="${escapeAttr(detailUrl)}" target="_blank" rel="noopener noreferrer">${codeText}</a>`
+            : `<span class="stock-code">${codeText}</span>`;
+        }
+        if (column.key === "SECURITY_SHORT_NAME") return `<span class="stock-name" data-chart-preview-target="name">${escapeHtml(value)}</span>`;
         const parts = String(value).split("|");
         let main = parts[0] || "-";
         if (column.unit === "%" && main !== "-" && !main.includes("%")) main = `${main}%`;
