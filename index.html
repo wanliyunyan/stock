@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>东方财富条件选股结果 - 静态表格</title>
+  <title>东方财富条件选股结果 - 动态表格</title>
   <style>
     :root {
       color-scheme: light;
@@ -146,52 +146,6 @@
       min-width: 0;
     }
 
-    .threshold-field {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      min-height: 38px;
-      padding: 5px 10px;
-      border: 1px solid var(--line);
-      border-radius: 7px;
-      background: #fff;
-      color: #344052;
-      font-weight: 700;
-      line-height: 1.3;
-    }
-
-    .threshold-label {
-      white-space: nowrap;
-    }
-
-    .threshold-input-shell {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      height: 28px;
-      padding: 0 8px;
-      border: 1px solid var(--line-strong);
-      border-radius: 6px;
-      background: #f8fbff;
-    }
-
-    .threshold-input {
-      width: 88px;
-      min-width: 0;
-      border: 0;
-      background: transparent;
-      color: var(--text);
-      font: inherit;
-      font-weight: 750;
-      text-align: right;
-      outline: none;
-    }
-
-    .threshold-input:focus {
-      color: var(--accent);
-    }
-
-    .threshold-unit,
     .query-rest {
       color: var(--muted);
       font-weight: 700;
@@ -634,21 +588,6 @@
       text-align: center;
     }
 
-    .col-price,
-    .col-change,
-    .col-pchg,
-    .col-st,
-    .col-delisting {
-      min-width: 92px;
-      width: 92px;
-    }
-
-    .col-market {
-      min-width: 156px;
-      width: 156px;
-      text-align: center;
-    }
-
     .col-growth {
       min-width: 178px;
       width: 178px;
@@ -733,18 +672,6 @@
 
       .reset-button {
         justify-self: start;
-      }
-
-      .threshold-field {
-        justify-content: space-between;
-      }
-
-      .threshold-input-shell {
-        padding: 0 7px;
-      }
-
-      .threshold-input {
-        width: 72px;
       }
 
       .source-link {
@@ -1819,18 +1746,13 @@
       function widthClassFor(key) {
         if (["SERIAL", "SECURITY_CODE", "SECURITY_SHORT_NAME"].includes(key)) return "";
         if (realtimeQuoteKeys.includes(key)) return "col-realtime";
-        if (key === "CHG") return "col-change";
-        if (key === "PCHG") return "col-pchg";
-        if (key === "TRADEMARKET") return "col-market";
         if (key.includes("同比增长率") || key.includes("环比增长率")) return "col-growth";
         if (key.startsWith("CONTRACTLIAB")) return "col-contract";
-        if (key.startsWith("IFSTSTOCK")) return "col-st";
-        if (key === "IF_DELISTING") return "col-delisting";
         return "col-wide";
       }
 
       function alignClassFor(key) {
-        if (["SECURITY_CODE", "SECURITY_SHORT_NAME", "TRADEMARKET", "IF_DELISTING"].includes(key) || key.startsWith("IFSTSTOCK")) return "text-center";
+        if (["SECURITY_CODE", "SECURITY_SHORT_NAME"].includes(key)) return "text-center";
         if (key === "SERIAL") return "text-center";
         return "";
       }
