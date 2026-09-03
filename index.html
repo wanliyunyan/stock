@@ -1031,6 +1031,20 @@
               </span>
             </label>
             <label class="range-filter">
+              <span class="range-label">股息率</span>
+              <span class="range-inputs">
+                <input class="range-input" id="dividendYieldMinInput" type="number" step="0.01" inputmode="decimal" placeholder="最小" aria-label="股息率最小值">
+                <input class="range-input" id="dividendYieldMaxInput" type="number" step="0.01" inputmode="decimal" placeholder="最大" aria-label="股息率最大值">
+              </span>
+            </label>
+            <label class="range-filter">
+              <span class="range-label">股息支付率</span>
+              <span class="range-inputs">
+                <input class="range-input" id="dividendPayoutRatioMinInput" type="number" step="0.01" inputmode="decimal" placeholder="最小" aria-label="股息支付率最小值">
+                <input class="range-input" id="dividendPayoutRatioMaxInput" type="number" step="0.01" inputmode="decimal" placeholder="最大" aria-label="股息支付率最大值">
+              </span>
+            </label>
+            <label class="range-filter">
               <span class="range-label">总市值</span>
               <span class="range-inputs">
                 <input class="range-input" id="marketValueMinInput" type="number" step="0.01" inputmode="decimal" placeholder="最小亿" aria-label="总市值最小值，单位亿">
@@ -1123,6 +1137,8 @@
         { id: "netMargin", keyPrefix: "XSJLL", scale: 1, minInput: document.getElementById("netMarginMinInput"), maxInput: document.getElementById("netMarginMaxInput") },
         { id: "pe", key: "PE_DYNAMIC", scale: 1, minInput: document.getElementById("peMinInput"), maxInput: document.getElementById("peMaxInput") },
         { id: "pb", key: "PB", scale: 1, minInput: document.getElementById("pbMinInput"), maxInput: document.getElementById("pbMaxInput") },
+        { id: "dividendYield", keyPrefix: "DIVIDEND_NEWRATIO_HYY", scale: 1, minInput: document.getElementById("dividendYieldMinInput"), maxInput: document.getElementById("dividendYieldMaxInput") },
+        { id: "dividendPayoutRatio", keyPrefix: "DIVIDEND_PAY_RATIO_HYA", scale: 1, minInput: document.getElementById("dividendPayoutRatioMinInput"), maxInput: document.getElementById("dividendPayoutRatioMaxInput") },
         { id: "marketValue", key: "TOAL_MARKET_VALUE<140>", scale: 100000000, minInput: document.getElementById("marketValueMinInput"), maxInput: document.getElementById("marketValueMaxInput") },
         { id: "yoy", titleIncludes: "同比增长率", scale: 1, minInput: yoyThresholdInput, maxInput: document.getElementById("yoyMaxInput"), live: true },
         { id: "qoq", titleIncludes: "环比增长率", scale: 1, minInput: qoqThresholdInput, maxInput: document.getElementById("qoqMaxInput"), live: true }
@@ -1167,6 +1183,7 @@
       };
       const realtimeQuoteKeys = ["NEWEST_PRICE", "PE_DYNAMIC", "PB", "TOAL_MARKET_VALUE<140>"];
       const reportMetricPrefixes = ["ROE_WEIGHT", "XSMLL", "XSJLL"];
+      const dividendMetricPrefixes = ["DIVIDEND_NEWRATIO_HYY", "DIVIDEND_PAY_RATIO_HYA"];
       const realtimeQuoteColumnTemplates = {
         NEWEST_PRICE: { title: "最新价", key: "NEWEST_PRICE", dateMsg: "", sortable: true, unit: "元" },
         PE_DYNAMIC: { title: "市盈率(动)", key: "PE_DYNAMIC", dateMsg: "", sortable: true, unit: "倍" },
@@ -1176,7 +1193,9 @@
       const liveMetricQueryParts = [
         "最新报告期净资产收益率",
         "最新报告期毛利率",
-        "最新报告期净利率"
+        "最新报告期净利率",
+        "最新股息率",
+        "最新股利支付率"
       ];
       const intervalChangeDays = [5, 10, 20, 30, 60, 120, 250];
       const intervalChangeQueryParts = intervalChangeDays.map(days => `近${days}日涨跌幅`);
@@ -1568,7 +1587,7 @@
           }
           return result;
         }, []);
-        return orderDisplayGroups(groupIntervalChangeColumns(groupGrowthRateColumns(groupReportMetricColumns(groupRealtimeQuoteColumns(groupContractLiabilityColumns(groups))))));
+        return orderDisplayGroups(groupIntervalChangeColumns(groupGrowthRateColumns(groupDividendMetricColumns(groupReportMetricColumns(groupRealtimeQuoteColumns(groupContractLiabilityColumns(groups)))))));
       }
 
       function keepDisplayColumn(column, seenColumnKeys) {
@@ -1669,6 +1688,46 @@
           ...otherGroups,
           {
             title: latestReportMetricGroupTitle(children),
+            children,
+            childLabelMode: "title"
+          }
+        ];
+      }
+
+      function groupDividendMetricColumns(groups) {
+        const dividendColumns = [];
+        const otherGroups = [];
+        const seenKeys = new Set();
+        groups.forEach(group => {
+          const columns = group.children || [group.column];
+          const matchedColumns = columns.filter(column => column && isDividendMetricColumn(column.key));
+          if (matchedColumns.length) {
+            matchedColumns.forEach(column => {
+              if (seenKeys.has(column.key)) return;
+              seenKeys.add(column.key);
+              dividendColumns.push(column);
+            });
+            const remainingColumns = columns.filter(column => column && !isDividendMetricColumn(column.key));
+            if (remainingColumns.length) {
+              if (group.children) {
+                otherGroups.push({ ...group, children: remainingColumns });
+              } else {
+                otherGroups.push({ title: group.title, column: remainingColumns[0] });
+              }
+            }
+            return;
+          }
+          otherGroups.push(group);
+        });
+        if (!dividendColumns.length) return groups;
+        const children = dividendMetricPrefixes
+          .map(prefix => latestReportMetricColumnForPrefix(dividendColumns, prefix))
+          .filter(Boolean);
+        if (!children.length) return otherGroups;
+        return [
+          ...otherGroups,
+          {
+            title: "分红指标",
             children,
             childLabelMode: "title"
           }
@@ -1789,12 +1848,14 @@
         if (key === "NEWEST_PRICE") return 3;
         if (key === "PE_DYNAMIC") return 4;
         if (key === "PB") return 5;
-        if (key === "TOAL_MARKET_VALUE<140>") return 6;
-        if (String(key || "").startsWith("ROE_WEIGHT")) return 7;
-        if (String(key || "").startsWith("XSMLL")) return 8;
-        if (String(key || "").startsWith("XSJLL")) return 9;
-        if (String(key || "").includes("同比增长率")) return 10;
-        if (String(key || "").includes("环比增长率")) return 11;
+        if (String(key || "").startsWith("DIVIDEND_NEWRATIO_HYY")) return 6;
+        if (String(key || "").startsWith("DIVIDEND_PAY_RATIO_HYA")) return 7;
+        if (key === "TOAL_MARKET_VALUE<140>") return 8;
+        if (String(key || "").startsWith("ROE_WEIGHT")) return 9;
+        if (String(key || "").startsWith("XSMLL")) return 10;
+        if (String(key || "").startsWith("XSJLL")) return 11;
+        if (String(key || "").includes("同比增长率")) return 12;
+        if (String(key || "").includes("环比增长率")) return 13;
         if (isIntervalChangeColumn(key)) return 1100;
         return 1000;
       }
@@ -2642,8 +2703,19 @@
         let main = parts[0] || "-";
         if (column.unit === "%" && main !== "-" && !main.includes("%")) main = `${main}%`;
         if (shouldHideReportSuffix(column)) return `<span class="cell-main">${escapeHtml(main)}</span>`;
-        const sub = parts.slice(1).join(" ");
+        const sub = cellSubtitleForValue(parts.slice(1).join(" "), column);
         return `<span class="cell-main">${escapeHtml(main)}</span>${sub ? `<span class="cell-sub">${escapeHtml(sub)}</span>` : ""}`;
+      }
+
+      function cellSubtitleForValue(valueSuffix, column) {
+        const explicit = String(valueSuffix || "").trim();
+        if (explicit) return explicit;
+        return dividendMetricCellSubtitle(column);
+      }
+
+      function dividendMetricCellSubtitle(column) {
+        if (!column || !isDividendMetricColumn(column.key)) return "";
+        return String(column.dateMsg || reportDateFromKey(column.key) || "").trim();
       }
 
       function sortBy(key) {
@@ -2665,6 +2737,8 @@
         if (String(column.key || "").startsWith("XSMLL")) return "毛利率";
         if (String(column.key || "").startsWith("XSJLL")) return "净利率";
         if (String(column.key || "").startsWith("ROE_WEIGHT")) return "净资产收益率";
+        if (String(column.key || "").startsWith("DIVIDEND_NEWRATIO_HYY")) return "股息率";
+        if (String(column.key || "").startsWith("DIVIDEND_PAY_RATIO_HYA")) return "股息支付率";
         return column.title;
       }
 
@@ -2676,6 +2750,11 @@
       function isReportMetricColumn(key) {
         const value = String(key || "");
         return reportMetricPrefixes.some(prefix => value.startsWith(prefix));
+      }
+
+      function isDividendMetricColumn(key) {
+        const value = String(key || "");
+        return dividendMetricPrefixes.some(prefix => value.startsWith(prefix));
       }
 
       function shouldHideReportSuffix(column) {
