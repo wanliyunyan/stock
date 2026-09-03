@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>东方财富条件选股结果 - 动态表格</title>
+  <title>东方财富条件选股结果 - 静态表格</title>
   <style>
     :root {
       color-scheme: light;
@@ -49,11 +49,16 @@
     .page {
       width: 100%;
       height: 100vh;
-      height: 100dvh;
       display: flex;
       flex-direction: column;
       overflow: hidden;
       padding: 18px 18px 28px;
+    }
+
+    @supports (height: 100dvh) {
+      .page {
+        height: 100dvh;
+      }
     }
 
     .app-header {
@@ -317,26 +322,6 @@
       color: var(--accent);
     }
 
-    .primary-button {
-      min-width: 92px;
-      padding: 0 13px;
-      border-color: var(--accent);
-      background: var(--accent);
-      color: #fff;
-    }
-
-    .primary-button:hover {
-      color: #fff;
-      background: #1d49bd;
-    }
-
-    .icon-button {
-      width: 38px;
-      padding: 0;
-      font-size: 17px;
-      line-height: 1;
-    }
-
     .table-shell {
       border-top: 0;
       border-radius: 0 0 8px 8px;
@@ -437,10 +422,7 @@
       white-space: nowrap;
     }
 
-    .text-left {
-      text-align: left;
-    }
-
+    /*noinspection CssUnusedSymbol*/
     .text-center {
       text-align: center;
     }
@@ -464,11 +446,13 @@
       font-size: 12px;
     }
 
+    /*noinspection CssUnusedSymbol*/
     .value-up .cell-main,
     .value-up {
       color: var(--red);
     }
 
+    /*noinspection CssUnusedSymbol*/
     .value-down .cell-main,
     .value-down {
       color: var(--green);
@@ -547,20 +531,24 @@
       font-weight: 750;
     }
 
+    /*noinspection CssUnusedSymbol*/
     .sticky-col {
       position: sticky;
       z-index: 3;
       box-shadow: 1px 0 0 var(--line);
     }
 
+    /*noinspection CssUnusedSymbol*/
     th.sticky-col {
       z-index: 6;
     }
 
+    /*noinspection CssUnusedSymbol*/
     tbody tr:hover .sticky-col {
       background: var(--accent-soft);
     }
 
+    /*noinspection CssUnusedSymbol*/
     .sticky-serial {
       left: 0;
       min-width: 52px;
@@ -568,12 +556,14 @@
       text-align: center;
     }
 
+    /*noinspection CssUnusedSymbol*/
     th.sticky-serial .th-button,
     td.sticky-serial {
       padding-left: 6px;
       padding-right: 6px;
     }
 
+    /*noinspection CssUnusedSymbol*/
     .sticky-code {
       left: 52px;
       min-width: 96px;
@@ -581,6 +571,7 @@
       text-align: center;
     }
 
+    /*noinspection CssUnusedSymbol*/
     .sticky-name {
       left: 148px;
       min-width: 136px;
@@ -588,21 +579,25 @@
       text-align: center;
     }
 
+    /*noinspection CssUnusedSymbol*/
     .col-growth {
       min-width: 178px;
       width: 178px;
     }
 
+    /*noinspection CssUnusedSymbol*/
     .col-contract {
       min-width: 132px;
       width: 132px;
     }
 
+    /*noinspection CssUnusedSymbol*/
     .col-wide {
       min-width: 132px;
       width: 132px;
     }
 
+    /*noinspection CssUnusedSymbol*/
     .col-realtime {
       min-width: 144px;
       width: 144px;
@@ -970,7 +965,7 @@
           .map(column => realtimeQuoteKeys.includes(column.key) ? { ...column, dateMsg: quoteDateTime || column.dateMsg } : column)
           .concat(quoteColumns);
         const mergedRows = source.rows.map(row => {
-          const quote = quotesByCode.get(String(row.SECURITY_CODE || ""));
+          const quote = quotesByCode.get(String(row["SECURITY_CODE"] || ""));
           if (!quote) return row;
           const mergedRow = { ...row };
           if (isUsableQuoteValue(quote.newestPrice)) mergedRow.NEWEST_PRICE = formatRealtimeNumber(quote.newestPrice);
@@ -991,7 +986,7 @@
       function uniqueSecurities(sourceRows) {
         const seen = new Set();
         return sourceRows.reduce((result, row) => {
-          const code = String(row.SECURITY_CODE || "").trim();
+          const code = String(row["SECURITY_CODE"] || "").trim();
           if (!/^\d{6}$/.test(code) || seen.has(code)) return result;
           seen.add(code);
           result.push({ code, market: marketCodeForRow(row) });
@@ -1000,9 +995,9 @@
       }
 
       function marketCodeForRow(row) {
-        const market = String(row.MARKET_NUM || "").trim();
+        const market = String(row["MARKET_NUM"] || "").trim();
         if (market === "0" || market === "1") return market;
-        return String(row.SECURITY_CODE || "").startsWith("6") ? "1" : "0";
+        return String(row["SECURITY_CODE"] || "").startsWith("6") ? "1" : "0";
       }
 
       function isUsableQuoteValue(value) {
@@ -1061,19 +1056,20 @@
           const responseText = await response.text();
           if (!response.ok) throw new Error(responseText || `HTTP ${response.status}`);
           const apiData = parseJsonResponse(responseText, "行情接口返回格式异常");
-          const diff = apiData && apiData.data && apiData.data.diff;
-          if (!Array.isArray(diff)) throw new Error((apiData && apiData.msg) || "行情接口未返回数据");
+          const payload = apiData && apiData["data"];
+          const diff = payload && payload["diff"];
+          if (!Array.isArray(diff)) throw new Error((apiData && apiData["msg"]) || "行情接口未返回数据");
           diff.forEach(item => {
-            const updatedAt = Number(item.f124) || 0;
+            const updatedAt = Number(item["f124"]) || 0;
             if (updatedAt > latestUpdatedAt) latestUpdatedAt = updatedAt;
             rows.push({
-              code: String(item.f12 || ""),
-              market: String(item.f13 ?? ""),
-              name: item.f14 || "",
-              newestPrice: item.f2,
-              totalMarketValue: item.f20,
-              pb: item.f23,
-              peDynamic: item.f115,
+              code: String(item["f12"] || ""),
+              market: String(item["f13"] ?? ""),
+              name: item["f14"] || "",
+              newestPrice: item["f2"],
+              totalMarketValue: item["f20"],
+              pb: item["f23"],
+              peDynamic: item["f115"],
               updatedAt
             });
           });
@@ -1291,7 +1287,7 @@
       }
 
       function isHiddenColumn(column) {
-        if (!column || column.hiddenNeed) return true;
+        if (!column || column["hiddenNeed"]) return true;
         return hiddenKeys.has(column.key) || String(column.key || "").startsWith("IFSTSTOCK");
       }
 
@@ -1328,7 +1324,7 @@
         return rows.filter(row => {
           if (!passesNumericFilters(row)) return false;
           if (!keyword) return true;
-          const haystack = [row.SECURITY_CODE, row.SECURITY_SHORT_NAME].join(" ").toLowerCase();
+          const haystack = [row["SECURITY_CODE"], row["SECURITY_SHORT_NAME"]].join(" ").toLowerCase();
           return haystack.includes(keyword);
         }).sort((a, b) => compareRows(a, b));
       }
@@ -1345,8 +1341,7 @@
           const key = String(item.key || "");
           const title = String(item.title || "");
           if (filter.keyPrefix && key.startsWith(filter.keyPrefix)) return true;
-          if (filter.titleIncludes && (key.includes(filter.titleIncludes) || title.includes(filter.titleIncludes))) return true;
-          return false;
+          return Boolean(filter.titleIncludes && (key.includes(filter.titleIncludes) || title.includes(filter.titleIncludes)));
         });
         return column || null;
       }
@@ -1364,15 +1359,14 @@
           const min = readThreshold(filter.minInput);
           const max = readThreshold(filter.maxInput);
           if (!key || (min === null && max === null)) return true;
-          const value = numericValue(valueForNumericFilter(row, filter, key));
+          const value = numericValue(valueForNumericFilter(row, key));
           if (Number.isNaN(value)) return false;
           if (min !== null && value < min * filter.scale) return false;
-          if (max !== null && value > max * filter.scale) return false;
-          return true;
+          return max === null || value <= max * filter.scale;
         });
       }
 
-      function valueForNumericFilter(row, filter, key) {
+      function valueForNumericFilter(row, key) {
         return row[key];
       }
 
@@ -1417,8 +1411,7 @@
         });
         const responseText = await response.text();
         if (!response.ok) throw new Error(responseText || `HTTP ${response.status}`);
-        const apiData = parseJsonResponse(responseText, "选股接口返回格式异常");
-        return apiData;
+        return parseJsonResponse(responseText, "选股接口返回格式异常");
       }
 
       function parseJsonResponse(text, fallbackMessage) {
@@ -1478,27 +1471,27 @@
       }
 
       function normalizeEastmoneyResponse(apiData, query) {
-        const payload = apiData && apiData.data;
-        const result = payload && payload.result;
-        const apiRows = result && (result.dataList || result.rows || result.list);
-        if (!result || !Array.isArray(apiRows) || !Array.isArray(result.columns)) {
-          throw new Error((apiData && apiData.msg) || "接口未返回表格数据");
+        const payload = apiData && apiData["data"];
+        const result = payload && payload["result"];
+        const apiRows = result && (result["dataList"] || result["rows"] || result["list"]);
+        if (!result || !Array.isArray(apiRows) || !Array.isArray(result["columns"])) {
+          throw new Error((apiData && apiData["msg"]) || "接口未返回表格数据");
         }
-        const resultXcId = payload.xcId || sourceMeta.resultXcId;
+        const resultXcId = payload["xcId"] || sourceMeta.resultXcId;
         return {
           sourceUrl: resultXcId ? `https://xuangu.eastmoney.com/Result?id=${resultXcId}&a=edit_way&j=refreshUrl` : sourceMeta.sourceUrl,
           originalXcId: sourceMeta.originalXcId,
           resultXcId,
           query,
-          quoteTime: payload.quoteTime || result.quoteTime || "",
-          searchCodeTime: payload.searchCodeTime || payload.quoteTime || "",
+          quoteTime: payload["quoteTime"] || result["quoteTime"] || "",
+          searchCodeTime: payload["searchCodeTime"] || payload["quoteTime"] || "",
           fetchedAt: new Date().toISOString(),
-          total: result.total || apiRows.length,
-          columns: result.columns,
+          total: result["total"] || apiRows.length,
+          columns: result["columns"],
           rows: apiRows.map((row, index) => ({ ...row, SERIAL: String(index + 1) })),
-          conditions: payload.responseConditionList || [],
-          traceInfo: payload.traceInfo || null,
-          rawMeta: result.meta || null
+          conditions: payload["responseConditionList"] || [],
+          traceInfo: payload["traceInfo"] || null,
+          rawMeta: result["meta"] || null
         };
       }
 
@@ -1653,8 +1646,7 @@
       }
 
       function reportPeriodForColumn(key) {
-        const sourceRows = rows;
-        const row = sourceRows.find(item => String(item[key] || "").includes("|"));
+        const row = rows.find(item => String(item[key] || "").includes("|"));
         if (!row) return "";
         return formatReportPeriod(String(row[key]).split("|").slice(1).join(" "));
       }
@@ -1705,14 +1697,14 @@
       }
 
       function reportDateFromKey(key) {
-        const match = String(key || "").match(/\{(\d{4})-(\d{2})-(\d{2})\}/);
+        const match = String(key || "").match(/[{](\d{4})-(\d{2})-(\d{2})[}]/);
         if (!match) return "";
         return `${match[1]}.${match[2]}.${match[3]}`;
       }
 
       function parseReportDateValue(value) {
         const text = String(value || "").trim();
-        const match = text.match(/(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
+        const match = text.match(/(\d{4})[./-](\d{1,2})[./-](\d{1,2})/);
         if (!match) return null;
         const time = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
         return {
@@ -1723,7 +1715,7 @@
 
       function formatReportDateTitle(value) {
         const text = String(value || "").trim();
-        const match = text.match(/(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
+        const match = text.match(/(\d{4})[./-](\d{1,2})[./-](\d{1,2})/);
         if (match) {
           return `${match[1]}.${Number(match[2])}.${Number(match[3])}`;
         }
@@ -1758,7 +1750,7 @@
       }
 
       function toneClassFor(value, column) {
-        if (!column.redGreenAble) return "";
+        if (!column["redGreenAble"]) return "";
         const numeric = numericValue(value);
         if (Number.isNaN(numeric) || numeric === 0) return "";
         return numeric > 0 ? "value-up" : "value-down";
