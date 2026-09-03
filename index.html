@@ -334,6 +334,7 @@
     }
 
     .table-wrap {
+      position: relative;
       flex: 1 1 auto;
       min-height: 0;
       max-height: none;
@@ -803,6 +804,54 @@
       text-align: center;
     }
 
+    .table-loading {
+      display: inline-flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-weight: 750;
+      line-height: 1.35;
+    }
+
+    .table-loading-spinner {
+      width: 18px;
+      height: 18px;
+      flex: 0 0 auto;
+      border: 2px solid #d8e2f0;
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: tableLoadingSpin 0.75s linear infinite;
+    }
+
+    @keyframes tableLoadingSpin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .table-loading-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 12;
+      display: grid;
+      place-items: center;
+      background: rgba(255, 255, 255, 0.64);
+    }
+
+    .table-loading-overlay[hidden] {
+      display: none;
+    }
+
+    .table-loading-overlay .table-loading {
+      min-height: 42px;
+      padding: 10px 14px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: rgba(255, 255, 255, 0.94);
+      box-shadow: 0 10px 24px rgba(31, 41, 55, 0.12);
+    }
+
     .footer {
       width: 100%;
       margin: 12px 0 0;
@@ -994,6 +1043,12 @@
       <section class="table-shell">
         <div class="table-wrap" id="tableWrap">
           <table id="stockTable" aria-label="股票筛选结果表"></table>
+          <div class="table-loading-overlay" id="tableLoadingOverlay" hidden>
+            <span class="table-loading" role="status" aria-live="polite">
+              <span class="table-loading-spinner" aria-hidden="true"></span>
+              <span>正在刷新东方财富实时数据...</span>
+            </span>
+          </div>
         </div>
       </section>
     </main>
@@ -1041,6 +1096,7 @@
     (() => {
       const table = document.getElementById("stockTable");
       const tableWrap = document.getElementById("tableWrap");
+      const tableLoadingOverlay = document.getElementById("tableLoadingOverlay");
       const searchInput = document.getElementById("searchInput");
       const resetButton = document.getElementById("resetButton");
       const chartPopover = document.getElementById("chartPopover");
@@ -1180,7 +1236,7 @@
       });
       liveNumericFilters.forEach(filter => {
         [filter.minInput, filter.maxInput].forEach(input => {
-          if (input) input.addEventListener("input", () => scheduleLiveUpdate());
+          if (input) input.addEventListener("input", () => scheduleLiveUpdate(550, true));
         });
       });
       resetButton.addEventListener("click", () => {
@@ -1738,9 +1794,15 @@
         });
       }
 
-      function scheduleLiveUpdate(delay = 550) {
+      function scheduleLiveUpdate(delay = 550, showLoading = false) {
         window.clearTimeout(liveTimer);
+        if (showLoading) setLiveLoadingStatus();
         liveTimer = window.setTimeout(refreshLiveData, delay);
+      }
+
+      function setLiveLoadingStatus() {
+        dataStatus = { type: "loading", error: "" };
+        render();
       }
 
       async function refreshLiveData() {
@@ -1883,9 +1945,15 @@
       function render() {
         const filtered = getFilteredRows();
         table.innerHTML = `${renderHeader()}${renderBody(filtered)}`;
+        setTableLoadingOverlay(dataStatus.type === "loading" && rows.length > 0);
         table.querySelectorAll("[data-sort-key]").forEach(button => {
           button.addEventListener("click", () => sortBy(button.dataset.sortKey));
         });
+      }
+
+      function setTableLoadingOverlay(isVisible) {
+        tableLoadingOverlay.hidden = !isVisible;
+        tableWrap.setAttribute("aria-busy", dataStatus.type === "loading" ? "true" : "false");
       }
 
       function attachChartPreviewEvents() {
@@ -2446,12 +2514,19 @@
 
       function renderBody(data) {
         if (!data.length) {
-          const message = dataStatus.type === "loading"
-            ? "正在获取东方财富实时数据..."
-            : dataStatus.error
-              ? `实时数据加载失败：${dataStatus.error}`
-              : "没有匹配的股票。";
-          return `<tbody><tr><td class="empty-state" colspan="${Math.max(1, leafColumns.length)}">${escapeHtml(message)}</td></tr></tbody>`;
+          const colspan = Math.max(1, leafColumns.length);
+          if (dataStatus.type === "loading") {
+            return `<tbody><tr><td class="empty-state" colspan="${colspan}">
+              <span class="table-loading" role="status" aria-live="polite">
+                <span class="table-loading-spinner" aria-hidden="true"></span>
+                <span>正在获取东方财富实时数据...</span>
+              </span>
+            </td></tr></tbody>`;
+          }
+          const message = dataStatus.error
+            ? `实时数据加载失败：${dataStatus.error}`
+            : "没有匹配的股票。";
+          return `<tbody><tr><td class="empty-state" colspan="${colspan}">${escapeHtml(message)}</td></tr></tbody>`;
         }
         const html = data.map(row => {
           const cells = leafColumns.map(column => renderCell(row, column)).join("");
