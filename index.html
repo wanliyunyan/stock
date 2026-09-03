@@ -95,7 +95,7 @@
 
     .meta-grid {
       display: grid;
-      grid-template-columns: repeat(3, minmax(118px, auto));
+      grid-template-columns: repeat(2, minmax(118px, auto));
       gap: 8px;
     }
 
@@ -154,6 +154,28 @@
     .query-rest {
       color: var(--muted);
       font-weight: 700;
+    }
+
+    .remote-count {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: baseline;
+      gap: 4px;
+      min-height: 24px;
+      padding-left: 8px;
+      border-left: 1px solid var(--line-strong);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .remote-count strong {
+      color: var(--text);
+      font-size: 16px;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
     }
 
     .band-note {
@@ -876,7 +898,7 @@
       }
 
       .meta-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
     }
@@ -952,10 +974,6 @@
       </div>
       <div class="meta-grid" aria-label="数据概览">
         <div class="meta-item">
-          <span>股票数</span>
-          <strong id="totalCount">-</strong>
-        </div>
-        <div class="meta-item">
           <span>行情时间</span>
           <strong id="quoteTime">-</strong>
         </div>
@@ -970,6 +988,11 @@
       <section class="query-band">
         <div class="query-controls" aria-label="合同负债筛选条件">
           <span class="band-note band-note-remote">远程筛选东财数据</span>
+          <span class="remote-count" aria-label="从东方财富筛选出来的股票数量">
+            <span>东财筛出</span>
+            <strong id="remoteCount">-</strong>
+            <span>只</span>
+          </span>
           <span class="query-rest">不要ST股及不要退市股；不要北交所</span>
           <label class="range-filter online-filter">
             <span class="range-label">合同负债同比增长率</span>
@@ -1551,7 +1574,8 @@
       }
 
       function setMeta() {
-        document.getElementById("totalCount").textContent = String(activeSource.total || rows.length);
+        const remoteTotal = activeSource.total || rows.length;
+        document.getElementById("remoteCount").textContent = String(remoteTotal);
         document.getElementById("quoteTime").textContent = activeSource.quoteTime || activeSource.searchCodeTime || "-";
         document.getElementById("sourceId").textContent = activeSource.originalXcId || activeSource.resultXcId || sourceMeta.originalXcId || "-";
         document.getElementById("sourceLink").href = activeSource.sourceUrl || sourceMeta.sourceUrl || "#";
