@@ -333,26 +333,6 @@
       flex-direction: column;
     }
 
-    .table-status {
-      display: flex;
-      gap: 14px;
-      align-items: center;
-      justify-content: space-between;
-      min-height: 34px;
-      padding: 0 14px;
-      border-top: 1px solid var(--line);
-      border-bottom: 1px solid var(--line);
-      background: var(--panel-soft);
-      color: var(--muted);
-      font-size: 13px;
-      flex: 0 0 auto;
-    }
-
-    .status-strong {
-      color: var(--text);
-      font-weight: 750;
-    }
-
     .table-wrap {
       flex: 1 1 auto;
       min-height: 0;
@@ -1012,10 +992,6 @@
       </section>
 
       <section class="table-shell">
-        <div class="table-status">
-          <span id="rowStatus"></span>
-          <span id="sortStatus"></span>
-        </div>
         <div class="table-wrap" id="tableWrap">
           <table id="stockTable" aria-label="股票筛选结果表"></table>
         </div>
@@ -1066,8 +1042,6 @@
       const table = document.getElementById("stockTable");
       const tableWrap = document.getElementById("tableWrap");
       const searchInput = document.getElementById("searchInput");
-      const rowStatus = document.getElementById("rowStatus");
-      const sortStatus = document.getElementById("sortStatus");
       const resetButton = document.getElementById("resetButton");
       const chartPopover = document.getElementById("chartPopover");
       const chartTitle = document.getElementById("chartTitle");
@@ -1909,13 +1883,6 @@
       function render() {
         const filtered = getFilteredRows();
         table.innerHTML = `${renderHeader()}${renderBody(filtered)}`;
-        rowStatus.innerHTML = dataStatus.type === "loading" && !rows.length
-          ? "正在获取东方财富实时数据..."
-          : dataStatus.error
-            ? `实时数据加载失败：${escapeHtml(dataStatus.error)}`
-            : `显示 <span class="status-strong">${filtered.length}</span> / ${rows.length} 只股票`;
-        const sortColumn = leafColumns.find(column => column.key === sortState.key);
-        sortStatus.textContent = sortColumn ? `${displayTitle(sortColumn)} ${sortState.direction === "desc" ? "降序" : "升序"}` : "";
         table.querySelectorAll("[data-sort-key]").forEach(button => {
           button.addEventListener("click", () => sortBy(button.dataset.sortKey));
         });
