@@ -430,7 +430,17 @@
     .stock-code,
     .stock-name {
       color: #173fff;
+      cursor: pointer;
       font-weight: 650;
+    }
+
+    tbody tr[data-stock-code] {
+      cursor: default;
+    }
+
+    tbody tr[data-stock-code]:focus-visible td {
+      outline: 2px solid rgba(36, 84, 214, 0.28);
+      outline-offset: -2px;
     }
 
     .cell-main {
@@ -603,6 +613,204 @@
       width: 144px;
     }
 
+    .chart-popover {
+      position: fixed;
+      left: 0;
+      top: 0;
+      z-index: 100;
+      width: min(590px, calc(100vw - 24px));
+      border: 1px solid #d6deeb;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 18px 42px rgba(15, 23, 42, 0.18);
+      opacity: 0;
+      pointer-events: none;
+      transform: translate3d(0, 6px, 0);
+      transition: opacity 120ms ease, transform 120ms ease;
+    }
+
+    .chart-popover[hidden] {
+      display: none;
+    }
+
+    .chart-popover.is-visible {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translate3d(0, 0, 0);
+    }
+
+    .chart-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: start;
+      min-height: 70px;
+      padding: 14px 16px 10px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .chart-name-line {
+      display: flex;
+      gap: 8px;
+      align-items: baseline;
+      min-width: 0;
+    }
+
+    .chart-title {
+      overflow: hidden;
+      color: var(--text);
+      font-size: 17px;
+      font-weight: 750;
+      line-height: 1.25;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .chart-code {
+      flex: 0 0 auto;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .chart-status {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.25;
+    }
+
+    .chart-quote {
+      display: grid;
+      justify-items: end;
+      gap: 5px;
+      min-width: 126px;
+    }
+
+    .chart-price {
+      color: var(--red);
+      font-size: 22px;
+      font-weight: 800;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .chart-change {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 750;
+      line-height: 1.1;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .chart-change.value-up,
+    .chart-price.value-up {
+      color: var(--red);
+    }
+
+    .chart-change.value-down,
+    .chart-price.value-down {
+      color: var(--green);
+    }
+
+    .chart-tabs {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      padding: 10px 16px 0;
+    }
+
+    .chart-tab {
+      height: 28px;
+      min-width: 46px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #f8fbff;
+      color: #526073;
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .chart-tab:hover,
+    .chart-tab.is-active {
+      border-color: #ff6a2a;
+      background: #fff4ed;
+      color: #f05a24;
+    }
+
+    .chart-meta {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      padding: 10px 16px 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.25;
+    }
+
+    .chart-meta span,
+    .chart-ma span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .chart-ma {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      padding: 8px 16px 0;
+      font-size: 12px;
+      font-weight: 750;
+      line-height: 1.2;
+    }
+
+    .chart-ma-5 {
+      color: #c98600;
+    }
+
+    .chart-ma-10 {
+      color: #df3fd1;
+    }
+
+    .chart-ma-20 {
+      color: #3d9a62;
+    }
+
+    .chart-canvas-wrap {
+      position: relative;
+      padding: 8px 14px 14px;
+    }
+
+    .chart-canvas {
+      display: block;
+      width: 100%;
+      height: 328px;
+      border: 1px solid #dfe5ef;
+      background: #fff;
+    }
+
+    .chart-message {
+      position: absolute;
+      left: 15px;
+      right: 15px;
+      top: 9px;
+      bottom: 15px;
+      display: none;
+      place-items: center;
+      background: rgba(255, 255, 255, 0.78);
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 750;
+      text-align: center;
+    }
+
+    .chart-message.is-visible {
+      display: grid;
+    }
+
     .empty-state {
       padding: 40px;
       color: var(--muted);
@@ -671,6 +879,26 @@
 
       .source-link {
         margin-top: 10px;
+      }
+
+      .chart-head {
+        grid-template-columns: 1fr;
+      }
+
+      .chart-quote {
+        justify-items: start;
+      }
+
+      .chart-meta {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .chart-ma {
+        grid-template-columns: 1fr;
+      }
+
+      .chart-canvas {
+        height: 286px;
       }
 
     }
@@ -791,13 +1019,66 @@
     <footer class="footer" id="footerText"></footer>
   </div>
 
+  <div class="chart-popover" id="chartPopover" role="dialog" aria-live="polite" aria-label="股票K线预览" hidden>
+    <div class="chart-head">
+      <div>
+        <div class="chart-name-line">
+          <span class="chart-title" id="chartTitle">-</span>
+          <span class="chart-code" id="chartCode">-</span>
+        </div>
+        <div class="chart-status" id="chartStatus">移动到股票代码或名称查看K线</div>
+      </div>
+      <div class="chart-quote">
+        <div class="chart-price" id="chartPrice">-</div>
+        <div class="chart-change" id="chartChange">-</div>
+      </div>
+    </div>
+    <div class="chart-tabs" role="tablist" aria-label="K线周期">
+      <button class="chart-tab is-active" type="button" data-chart-period="101" aria-selected="true">日K</button>
+      <button class="chart-tab" type="button" data-chart-period="102" aria-selected="false">周K</button>
+      <button class="chart-tab" type="button" data-chart-period="103" aria-selected="false">月K</button>
+    </div>
+    <div class="chart-meta" aria-label="行情摘要">
+      <span id="chartOpen">开 -</span>
+      <span id="chartHigh">高 -</span>
+      <span id="chartLow">低 -</span>
+      <span id="chartAmount">额 -</span>
+    </div>
+    <div class="chart-ma" aria-label="均线">
+      <span class="chart-ma-5" id="chartMa5">MA5 -</span>
+      <span class="chart-ma-10" id="chartMa10">MA10 -</span>
+      <span class="chart-ma-20" id="chartMa20">MA20 -</span>
+    </div>
+    <div class="chart-canvas-wrap">
+      <canvas class="chart-canvas" id="chartCanvas" width="556" height="328"></canvas>
+      <div class="chart-message" id="chartMessage">正在加载K线...</div>
+    </div>
+  </div>
+
   <script>
     (() => {
       const table = document.getElementById("stockTable");
+      const tableWrap = document.getElementById("tableWrap");
       const searchInput = document.getElementById("searchInput");
       const rowStatus = document.getElementById("rowStatus");
       const sortStatus = document.getElementById("sortStatus");
       const resetButton = document.getElementById("resetButton");
+      const chartPopover = document.getElementById("chartPopover");
+      const chartTitle = document.getElementById("chartTitle");
+      const chartCode = document.getElementById("chartCode");
+      const chartStatus = document.getElementById("chartStatus");
+      const chartPrice = document.getElementById("chartPrice");
+      const chartChange = document.getElementById("chartChange");
+      const chartOpen = document.getElementById("chartOpen");
+      const chartHigh = document.getElementById("chartHigh");
+      const chartLow = document.getElementById("chartLow");
+      const chartAmount = document.getElementById("chartAmount");
+      const chartMa5 = document.getElementById("chartMa5");
+      const chartMa10 = document.getElementById("chartMa10");
+      const chartMa20 = document.getElementById("chartMa20");
+      const chartCanvas = document.getElementById("chartCanvas");
+      const chartMessage = document.getElementById("chartMessage");
+      const chartPeriodButtons = Array.from(document.querySelectorAll("[data-chart-period]"));
       const qoqThresholdInput = document.getElementById("qoqThresholdInput");
       const yoyThresholdInput = document.getElementById("yoyThresholdInput");
       const numericFilters = [
@@ -814,16 +1095,26 @@
       const localNumericFilters = numericFilters.filter(filter => !filter.live);
       const eastmoneySearchApi = "https://np-tjxg-g.eastmoney.com/api/smart-tag/stock/v3/pw/search-code";
       const eastmoneyQuoteApi = "https://push2.eastmoney.com/api/qt/ulist.np/get";
+      const eastmoneyKlineApi = "https://push2his.eastmoney.com/api/qt/stock/kline/get";
       const livePageSize = 5000;
       const quoteFields = "f12,f13,f14,f2,f20,f23,f115,f124";
+      const klineFields1 = "f1,f2,f3,f4,f5,f6";
+      const klineFields2 = "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61";
       const quoteBatchSize = 80;
       const liveRefreshMs = 60 * 1000;
+      const chartHoverDelayMs = 180;
+      const chartHideDelayMs = 180;
+      const chartPeriods = {
+        "101": { label: "日K", limit: 90 },
+        "102": { label: "周K", limit: 90 },
+        "103": { label: "月K", limit: 90 }
+      };
       const isLocalDev = location.protocol === "file:" || ["localhost", "127.0.0.1", "::1"].includes(location.hostname);
       const apiBaseUrl = resolveApiBaseUrl();
       const sourceMeta = {
-        sourceUrl: "https://xuangu.eastmoney.com/Result?id=xc139baa1b02c2016458&a=edit_way&j=refreshUrl",
-        originalXcId: "xc139baa1b02c2016458",
-        resultXcId: "xc139bb2faf5c100ea5d"
+        sourceUrl: "https://xuangu.eastmoney.com/Result?id=xc13a0e7a2b0c1012a62&a=edit_way&j=refreshUrl",
+        originalXcId: "xc13a0e7a2b0c1012a62",
+        resultXcId: "xc13a0e7a2b0c1012a62"
       };
       const emptySource = {
         ...sourceMeta,
@@ -876,6 +1167,22 @@
       let filterKeys = {};
       let liveTimer = 0;
       let liveRequestId = 0;
+      let chartRequestId = 0;
+      const chartCache = new Map();
+      const chartState = {
+        rowElement: null,
+        code: "",
+        market: "",
+        name: "",
+        period: "101",
+        pointerX: 0,
+        pointerY: 0,
+        hoverTimer: 0,
+        hideTimer: 0,
+        hideCommitTimer: 0,
+        abortController: null,
+        rows: []
+      };
 
       applyData(emptySource, { type: "loading", error: "" });
       if (apiBaseUrl || isLocalDev) {
@@ -901,6 +1208,7 @@
         clearNumericFilters(localNumericFilters);
         render();
       });
+      attachChartPreviewEvents();
 
       function applyData(nextSource, status) {
         activeSource = nextSource || emptySource;
@@ -1079,6 +1387,69 @@
           quoteMinute: latestUpdatedAt ? formatQuoteMinute(latestUpdatedAt) : "",
           rows
         };
+      }
+
+      async function requestEastmoneyKlines(stock, period, signal) {
+        const selectedPeriod = chartPeriods[period] ? period : "101";
+        const params = new URLSearchParams({
+          secid: `${stock.market}.${stock.code}`,
+          fields1: klineFields1,
+          fields2: klineFields2,
+          klt: selectedPeriod,
+          fqt: "1",
+          end: "20500101",
+          lmt: String(chartPeriods[selectedPeriod].limit)
+        });
+        let responseText = "";
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          try {
+            const response = await fetch(`${eastmoneyKlineApi}?${params.toString()}`, {
+              signal,
+              cache: "no-store",
+              headers: {
+                "Accept": "application/json, text/plain, */*"
+              }
+            });
+            responseText = await response.text();
+            if (!response.ok) throw new Error(responseText || `HTTP ${response.status}`);
+            break;
+          } catch (error) {
+            if ((error && error.name === "AbortError") || attempt === 2) throw error;
+            await new Promise(resolve => window.setTimeout(resolve, 180 * (attempt + 1)));
+          }
+        }
+        const apiData = parseJsonResponse(responseText, "K线接口返回格式异常");
+        if (apiData && apiData.rc !== 0) throw new Error((apiData && apiData.msg) || "K线接口暂时不可用");
+        const payload = apiData && apiData.data;
+        const rows = parseKlineRows(payload && payload.klines);
+        return {
+          code: String((payload && payload.code) || stock.code || ""),
+          market: String((payload && payload.market) ?? stock.market ?? ""),
+          name: (payload && payload.name) || stock.name || "",
+          period: selectedPeriod,
+          decimal: Number((payload && payload.decimal) || 2),
+          rows
+        };
+      }
+
+      function parseKlineRows(klines) {
+        if (!Array.isArray(klines)) return [];
+        return klines.map(item => {
+          const parts = String(item || "").split(",");
+          return {
+            date: parts[0] || "",
+            open: Number(parts[1]),
+            close: Number(parts[2]),
+            high: Number(parts[3]),
+            low: Number(parts[4]),
+            volume: Number(parts[5]),
+            amount: Number(parts[6]),
+            amplitude: Number(parts[7]),
+            pctChange: Number(parts[8]),
+            change: Number(parts[9]),
+            turnover: Number(parts[10])
+          };
+        }).filter(row => row.date && [row.open, row.close, row.high, row.low].every(Number.isFinite));
       }
 
       function formatMarketValue(value) {
@@ -1534,6 +1905,528 @@
         });
       }
 
+      function attachChartPreviewEvents() {
+        const previewEnter = event => {
+          const row = stockRowFromTarget(event.target);
+          if (!row) return;
+          const previousRow = stockRowFromTarget(event.relatedTarget);
+          if (previousRow === row) return;
+          queueChartPreview(row, event, false);
+        };
+        const previewMove = event => {
+          const row = stockRowFromTarget(event.target);
+          if (!row || row !== chartState.rowElement) return;
+          chartState.pointerX = event.clientX;
+          chartState.pointerY = event.clientY;
+          placeChartPopover(row);
+        };
+        const previewLeave = event => {
+          const row = stockRowFromTarget(event.target);
+          if (!row) return;
+          const nextRow = stockRowFromTarget(event.relatedTarget);
+          if (nextRow === row || (event.relatedTarget && chartPopover.contains(event.relatedTarget))) return;
+          scheduleHideChartPreview();
+        };
+        ["pointerover", "mouseover"].forEach(type => table.addEventListener(type, previewEnter));
+        ["pointermove", "mousemove"].forEach(type => table.addEventListener(type, previewMove));
+        ["pointerout", "mouseout"].forEach(type => table.addEventListener(type, previewLeave));
+        table.addEventListener("focusin", event => {
+          const row = stockRowFromTarget(event.target);
+          if (row) queueChartPreview(row, event, true);
+        });
+        table.addEventListener("focusout", event => {
+          if (event.relatedTarget && chartPopover.contains(event.relatedTarget)) return;
+          scheduleHideChartPreview();
+        });
+        table.addEventListener("click", event => {
+          const row = stockRowFromTarget(event.target);
+          if (row) queueChartPreview(row, event, true);
+        });
+        chartPeriodButtons.forEach(button => {
+          button.addEventListener("click", () => {
+            const period = button.dataset.chartPeriod;
+            if (!chartPeriods[period] || chartState.period === period) return;
+            chartState.period = period;
+            setActiveChartPeriod(period);
+            if (!chartPopover.hidden && chartState.code) loadChartDataForCurrentPreview();
+          });
+        });
+        chartPopover.addEventListener("pointerenter", cancelHideChartPreview);
+        chartPopover.addEventListener("mouseenter", cancelHideChartPreview);
+        chartPopover.addEventListener("pointerleave", scheduleHideChartPreview);
+        chartPopover.addEventListener("mouseleave", scheduleHideChartPreview);
+        tableWrap.addEventListener("scroll", hideChartPreview, { passive: true });
+        window.addEventListener("resize", () => {
+          if (chartPopover.hidden) return;
+          placeChartPopover(chartState.rowElement);
+          if (chartState.rows.length) renderKlineChart(chartState.rows, chartState.period);
+        });
+        document.addEventListener("keydown", event => {
+          if (event.key === "Escape") hideChartPreview();
+        });
+      }
+
+      function cancelHideChartPreview() {
+        window.clearTimeout(chartState.hideTimer);
+      }
+
+      function stockRowFromTarget(target) {
+        return target && typeof target.closest === "function" ? target.closest("tbody tr[data-stock-code]") : null;
+      }
+
+      function queueChartPreview(row, event, immediate) {
+        window.clearTimeout(chartState.hoverTimer);
+        window.clearTimeout(chartState.hideTimer);
+        window.clearTimeout(chartState.hideCommitTimer);
+        chartState.pointerX = event && Number.isFinite(event.clientX) ? event.clientX : 0;
+        chartState.pointerY = event && Number.isFinite(event.clientY) ? event.clientY : 0;
+        if (immediate) {
+          showChartPreview(row);
+          return;
+        }
+        chartState.hoverTimer = window.setTimeout(() => showChartPreview(row), chartHoverDelayMs);
+      }
+
+      function showChartPreview(row) {
+        if (!row || !row.dataset.stockCode) return;
+        const code = row.dataset.stockCode;
+        const market = row.dataset.stockMarket || marketCodeForRow({ SECURITY_CODE: code });
+        const name = row.dataset.stockName || code;
+        const rowData = rowDataForPreview(code);
+        const stockChanged = chartState.code !== code || chartState.market !== market;
+        chartState.rowElement = row;
+        chartState.code = code;
+        chartState.market = market;
+        chartState.name = name;
+        if (stockChanged) chartState.period = "101";
+        chartPopover.hidden = false;
+        chartPopover.setAttribute("aria-hidden", "false");
+        chartPopover.classList.add("is-visible");
+        setActiveChartPeriod(chartState.period);
+        setChartHeader({ code, market, name, rowData });
+        placeChartPopover(row);
+        loadChartDataForCurrentPreview();
+      }
+
+      function rowDataForPreview(code) {
+        return rows.find(row => String(row["SECURITY_CODE"] || "") === String(code || "")) || null;
+      }
+
+      function setChartHeader(stock) {
+        chartTitle.textContent = stock.name || "-";
+        chartCode.textContent = `${marketLabel(stock.market)}${stock.code}`;
+        const latestPrice = numericValue(stock.rowData && stock.rowData.NEWEST_PRICE);
+        const quoteChange = numericValue(stock.rowData && stock.rowData.CHG);
+        const quotePctChange = numericValue(stock.rowData && stock.rowData.PCHG);
+        chartPrice.textContent = Number.isNaN(latestPrice) ? "-" : formatPrice(latestPrice);
+        chartChange.textContent = !Number.isNaN(quotePctChange)
+          ? formatSignedPercent(quotePctChange)
+          : (!Number.isNaN(quoteChange) ? formatSignedNumber(quoteChange) : "-");
+        setTone(chartPrice, !Number.isNaN(quoteChange) ? quoteChange : quotePctChange);
+        setTone(chartChange, !Number.isNaN(quotePctChange) ? quotePctChange : quoteChange);
+        chartStatus.textContent = `${chartPeriods[chartState.period].label} 前复权`;
+        setChartMeta(null);
+        showChartMessage("正在加载K线...");
+        drawEmptyKlineChart();
+      }
+
+      function marketLabel(market) {
+        return String(market) === "1" ? "SH" : "SZ";
+      }
+
+      function scheduleHideChartPreview() {
+        window.clearTimeout(chartState.hoverTimer);
+        window.clearTimeout(chartState.hideTimer);
+        chartState.hideTimer = window.setTimeout(hideChartPreview, chartHideDelayMs);
+      }
+
+      function hideChartPreview() {
+        window.clearTimeout(chartState.hoverTimer);
+        window.clearTimeout(chartState.hideTimer);
+        if (chartState.abortController) {
+          chartState.abortController.abort();
+          chartState.abortController = null;
+        }
+        chartState.rowElement = null;
+        chartState.rows = [];
+        chartPopover.classList.remove("is-visible");
+        chartPopover.setAttribute("aria-hidden", "true");
+        window.clearTimeout(chartState.hideCommitTimer);
+        chartState.hideCommitTimer = window.setTimeout(() => {
+          if (!chartPopover.classList.contains("is-visible")) chartPopover.hidden = true;
+        }, 130);
+      }
+
+      function setActiveChartPeriod(period) {
+        chartPeriodButtons.forEach(button => {
+          const isActive = button.dataset.chartPeriod === period;
+          button.classList.toggle("is-active", isActive);
+          button.setAttribute("aria-selected", isActive ? "true" : "false");
+        });
+      }
+
+      async function loadChartDataForCurrentPreview() {
+        const requestId = ++chartRequestId;
+        const stock = {
+          code: chartState.code,
+          market: chartState.market,
+          name: chartState.name
+        };
+        const period = chartState.period;
+        const cacheKey = `${stock.market}.${stock.code}.${period}`;
+        const cached = chartCache.get(cacheKey);
+        chartState.rows = [];
+        setChartHeader({ ...stock, rowData: rowDataForPreview(stock.code) });
+        chartStatus.textContent = `${chartPeriods[period].label} 前复权，正在加载`;
+        showChartMessage("正在加载K线...");
+        drawEmptyKlineChart();
+        if (cached) {
+          renderChartData(cached);
+          return;
+        }
+        if (chartState.abortController) chartState.abortController.abort();
+        chartState.abortController = new AbortController();
+        try {
+          const data = await requestEastmoneyKlines(stock, period, chartState.abortController.signal);
+          if (requestId !== chartRequestId || stock.code !== chartState.code || period !== chartState.period) return;
+          chartCache.set(cacheKey, data);
+          renderChartData(data);
+        } catch (error) {
+          if (error && error.name === "AbortError") return;
+          if (requestId !== chartRequestId) return;
+          chartState.rows = [];
+          chartStatus.textContent = `${chartPeriods[period].label} 前复权，加载失败`;
+          setChartMeta(null);
+          showChartMessage(cleanKlineError(error));
+          drawEmptyKlineChart();
+        } finally {
+          if (requestId === chartRequestId) chartState.abortController = null;
+        }
+      }
+
+      function renderChartData(data) {
+        if (!data || !Array.isArray(data.rows) || !data.rows.length) {
+          chartState.rows = [];
+          chartStatus.textContent = `${chartPeriods[chartState.period].label} 前复权，暂无数据`;
+          setChartMeta(null);
+          showChartMessage("暂无K线数据");
+          drawEmptyKlineChart();
+          return;
+        }
+        const visibleRows = data.rows.slice(-chartPeriods[data.period].limit);
+        const summary = chartSummary(visibleRows);
+        chartState.rows = visibleRows;
+        chartTitle.textContent = data.name || chartState.name || "-";
+        chartCode.textContent = `${marketLabel(data.market)}${data.code || chartState.code}`;
+        chartPrice.textContent = formatPrice(summary.close, data.decimal);
+        chartChange.textContent = `${formatSignedNumber(summary.change)} ${formatSignedPercent(summary.pctChange)}`;
+        setTone(chartPrice, summary.change);
+        setTone(chartChange, summary.change);
+        chartStatus.textContent = `${chartPeriods[data.period].label} 前复权 ${visibleRows[0].date} 至 ${summary.date}`;
+        setChartMeta(summary);
+        hideChartMessage();
+        renderKlineChart(visibleRows, data.period);
+      }
+
+      function chartSummary(dataRows) {
+        const latest = dataRows[dataRows.length - 1];
+        const previous = dataRows[dataRows.length - 2] || null;
+        const fallbackChange = previous ? latest.close - previous.close : 0;
+        const change = Number.isFinite(latest.change) ? latest.change : fallbackChange;
+        const pctChange = Number.isFinite(latest.pctChange) ? latest.pctChange : (previous && previous.close ? change / previous.close * 100 : 0);
+        const ma5 = calculateMovingAverage(dataRows, 5);
+        const ma10 = calculateMovingAverage(dataRows, 10);
+        const ma20 = calculateMovingAverage(dataRows, 20);
+        return {
+          ...latest,
+          change,
+          pctChange,
+          ma5: lastFiniteValue(ma5),
+          ma10: lastFiniteValue(ma10),
+          ma20: lastFiniteValue(ma20)
+        };
+      }
+
+      function setChartMeta(summary) {
+        chartOpen.textContent = `开 ${summary ? formatPrice(summary.open) : "-"}`;
+        chartHigh.textContent = `高 ${summary ? formatPrice(summary.high) : "-"}`;
+        chartLow.textContent = `低 ${summary ? formatPrice(summary.low) : "-"}`;
+        chartAmount.textContent = `额 ${summary ? formatAmount(summary.amount) : "-"}`;
+        chartMa5.textContent = `MA5 ${summary && Number.isFinite(summary.ma5) ? formatPrice(summary.ma5) : "-"}`;
+        chartMa10.textContent = `MA10 ${summary && Number.isFinite(summary.ma10) ? formatPrice(summary.ma10) : "-"}`;
+        chartMa20.textContent = `MA20 ${summary && Number.isFinite(summary.ma20) ? formatPrice(summary.ma20) : "-"}`;
+      }
+
+      function placeChartPopover(row) {
+        if (!row || chartPopover.hidden) return;
+        const margin = 12;
+        const rect = row.getBoundingClientRect();
+        const popoverWidth = chartPopover.offsetWidth || 590;
+        const popoverHeight = chartPopover.offsetHeight || 450;
+        const pointerX = chartState.pointerX || rect.left + rect.width / 2;
+        const sideSpace = window.innerWidth - rect.right;
+        let left = sideSpace >= popoverWidth + margin ? rect.right + 8 : pointerX + 18;
+        if (left + popoverWidth > window.innerWidth - margin) left = rect.left - popoverWidth - 8;
+        if (left < margin) left = Math.max(margin, window.innerWidth - popoverWidth - margin);
+        let top = rect.top - 22;
+        if (top + popoverHeight > window.innerHeight - margin) top = window.innerHeight - popoverHeight - margin;
+        if (top < margin) top = margin;
+        chartPopover.style.left = `${Math.round(left)}px`;
+        chartPopover.style.top = `${Math.round(top)}px`;
+      }
+
+      function showChartMessage(message) {
+        chartMessage.textContent = message || "";
+        chartMessage.classList.add("is-visible");
+      }
+
+      function hideChartMessage() {
+        chartMessage.classList.remove("is-visible");
+      }
+
+      function cleanKlineError(error) {
+        const message = String(error && error.message ? error.message : error).replace(/\s+/g, " ");
+        if (/Failed to fetch|NetworkError|CORS|abort|HTTP|JSON/i.test(message)) return "K线加载失败，稍后再试";
+        return message.slice(0, 80) || "K线加载失败，稍后再试";
+      }
+
+      function drawEmptyKlineChart() {
+        const canvasSize = prepareCanvas();
+        const ctx = canvasSize.ctx;
+        ctx.clearRect(0, 0, canvasSize.width, canvasSize.height);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvasSize.width, canvasSize.height);
+        drawChartGrid(ctx, 46, 20, canvasSize.width - 66, canvasSize.height - 74, 4, 4);
+      }
+
+      function renderKlineChart(dataRows, period) {
+        const canvasSize = prepareCanvas();
+        const ctx = canvasSize.ctx;
+        const width = canvasSize.width;
+        const height = canvasSize.height;
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, width, height);
+        if (!Array.isArray(dataRows) || !dataRows.length) {
+          drawEmptyKlineChart();
+          return;
+        }
+        const rowsToDraw = dataRows.slice(-chartPeriods[period].limit);
+        const ma5 = calculateMovingAverage(rowsToDraw, 5);
+        const ma10 = calculateMovingAverage(rowsToDraw, 10);
+        const ma20 = calculateMovingAverage(rowsToDraw, 20);
+        const plot = {
+          x: 46,
+          y: 20,
+          w: width - 66,
+          h: Math.max(160, Math.round(height * 0.62))
+        };
+        const volume = {
+          x: plot.x,
+          y: plot.y + plot.h + 30,
+          w: plot.w,
+          h: Math.max(52, height - plot.y - plot.h - 48)
+        };
+        const priceValues = rowsToDraw.flatMap(row => [row.high, row.low])
+          .concat(ma5, ma10, ma20)
+          .filter(Number.isFinite);
+        const maxPrice = Math.max(...priceValues);
+        const minPrice = Math.min(...priceValues);
+        const pricePadding = Math.max((maxPrice - minPrice) * 0.08, maxPrice * 0.004, 0.01);
+        const topPrice = maxPrice + pricePadding;
+        const bottomPrice = Math.max(0, minPrice - pricePadding);
+        const maxVolume = Math.max(...rowsToDraw.map(row => Number(row.volume) || 0), 1);
+        const priceToY = price => plot.y + (topPrice - price) / (topPrice - bottomPrice || 1) * plot.h;
+        const volumeToY = value => volume.y + volume.h - (Number(value) || 0) / maxVolume * volume.h;
+        drawChartGrid(ctx, plot.x, plot.y, plot.w, plot.h, 4, 4);
+        drawChartGrid(ctx, volume.x, volume.y, volume.w, volume.h, 2, 4);
+        drawPriceLabels(ctx, plot, topPrice, bottomPrice);
+        drawDateLabels(ctx, rowsToDraw, volume);
+        const step = plot.w / rowsToDraw.length;
+        const candleWidth = Math.max(3, Math.min(9, step * 0.58));
+        rowsToDraw.forEach((row, index) => {
+          const x = plot.x + step * index + step / 2;
+          const isUp = row.close >= row.open;
+          const color = isUp ? "#d8343f" : "#118a55";
+          const highY = priceToY(row.high);
+          const lowY = priceToY(row.low);
+          const openY = priceToY(row.open);
+          const closeY = priceToY(row.close);
+          const top = Math.min(openY, closeY);
+          const bodyHeight = Math.max(1, Math.abs(closeY - openY));
+          ctx.strokeStyle = color;
+          ctx.fillStyle = color;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(x, highY);
+          ctx.lineTo(x, lowY);
+          ctx.stroke();
+          ctx.fillRect(x - candleWidth / 2, top, candleWidth, bodyHeight);
+          const volumeTop = volumeToY(row.volume);
+          ctx.globalAlpha = 0.78;
+          ctx.fillRect(x - candleWidth / 2, volumeTop, candleWidth, volume.y + volume.h - volumeTop);
+          ctx.globalAlpha = 1;
+        });
+        drawMovingAverage(ctx, ma5, rowsToDraw, plot, priceToY, "#c98600");
+        drawMovingAverage(ctx, ma10, rowsToDraw, plot, priceToY, "#df3fd1");
+        drawMovingAverage(ctx, ma20, rowsToDraw, plot, priceToY, "#3d9a62");
+        drawLatestPriceLine(ctx, rowsToDraw[rowsToDraw.length - 1].close, plot, priceToY);
+        ctx.fillStyle = "#65758b";
+        ctx.font = "12px Microsoft YaHei, Arial, sans-serif";
+        ctx.fillText("成交量", volume.x, volume.y - 8);
+      }
+
+      function prepareCanvas() {
+        const rect = chartCanvas.getBoundingClientRect();
+        const width = Math.max(320, Math.round(rect.width || 556));
+        const height = Math.max(240, Math.round(rect.height || 328));
+        const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+        chartCanvas.width = Math.round(width * dpr);
+        chartCanvas.height = Math.round(height * dpr);
+        const ctx = chartCanvas.getContext("2d");
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        return { ctx, width, height };
+      }
+
+      function drawChartGrid(ctx, x, y, width, height, rowsCount, columnsCount) {
+        ctx.strokeStyle = "#edf1f7";
+        ctx.lineWidth = 1;
+        for (let index = 0; index <= rowsCount; index += 1) {
+          const lineY = y + height / rowsCount * index;
+          ctx.beginPath();
+          ctx.moveTo(x, lineY);
+          ctx.lineTo(x + width, lineY);
+          ctx.stroke();
+        }
+        for (let index = 0; index <= columnsCount; index += 1) {
+          const lineX = x + width / columnsCount * index;
+          ctx.beginPath();
+          ctx.moveTo(lineX, y);
+          ctx.lineTo(lineX, y + height);
+          ctx.stroke();
+        }
+      }
+
+      function drawPriceLabels(ctx, plot, topPrice, bottomPrice) {
+        ctx.fillStyle = "#65758b";
+        ctx.font = "11px Microsoft YaHei, Arial, sans-serif";
+        ctx.textAlign = "right";
+        ctx.textBaseline = "middle";
+        for (let index = 0; index <= 4; index += 1) {
+          const value = topPrice - (topPrice - bottomPrice) / 4 * index;
+          const y = plot.y + plot.h / 4 * index;
+          ctx.fillText(formatPrice(value), plot.x - 7, y);
+        }
+        ctx.textAlign = "left";
+      }
+
+      function drawDateLabels(ctx, dataRows, volume) {
+        if (!dataRows.length) return;
+        ctx.fillStyle = "#65758b";
+        ctx.font = "11px Microsoft YaHei, Arial, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        const markers = [0, Math.floor(dataRows.length / 3), Math.floor(dataRows.length * 2 / 3), dataRows.length - 1];
+        const uniqueMarkers = [...new Set(markers)].filter(index => index >= 0 && index < dataRows.length);
+        uniqueMarkers.forEach(index => {
+          const x = volume.x + volume.w / dataRows.length * index + volume.w / dataRows.length / 2;
+          ctx.fillText(shortChartDate(dataRows[index].date), x, volume.y + volume.h + 8);
+        });
+        ctx.textAlign = "left";
+      }
+
+      function drawMovingAverage(ctx, values, dataRows, plot, priceToY, color) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.3;
+        ctx.beginPath();
+        let hasPoint = false;
+        const step = plot.w / dataRows.length;
+        values.forEach((value, index) => {
+          if (!Number.isFinite(value)) return;
+          const x = plot.x + step * index + step / 2;
+          const y = priceToY(value);
+          if (!hasPoint) {
+            ctx.moveTo(x, y);
+            hasPoint = true;
+          } else {
+            ctx.lineTo(x, y);
+          }
+        });
+        if (hasPoint) ctx.stroke();
+      }
+
+      function drawLatestPriceLine(ctx, price, plot, priceToY) {
+        if (!Number.isFinite(price)) return;
+        const y = priceToY(price);
+        ctx.save();
+        ctx.strokeStyle = "rgba(36, 84, 214, 0.38)";
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(plot.x, y);
+        ctx.lineTo(plot.x + plot.w, y);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function calculateMovingAverage(dataRows, period) {
+        let sum = 0;
+        return dataRows.map((row, index) => {
+          sum += row.close;
+          if (index >= period) sum -= dataRows[index - period].close;
+          return index >= period - 1 ? sum / period : null;
+        });
+      }
+
+      function lastFiniteValue(values) {
+        for (let index = values.length - 1; index >= 0; index -= 1) {
+          if (Number.isFinite(values[index])) return values[index];
+        }
+        return NaN;
+      }
+
+      function shortChartDate(value) {
+        const parts = String(value || "").split("-");
+        if (parts.length < 3) return value || "";
+        return `${parts[1]}-${parts[2]}`;
+      }
+
+      function formatPrice(value, decimal = 2) {
+        const number = Number(value);
+        if (!Number.isFinite(number)) return "-";
+        return number.toFixed(decimal).replace(/\.?0+$/, "");
+      }
+
+      function formatSignedNumber(value) {
+        const number = Number(value);
+        if (!Number.isFinite(number)) return "-";
+        const prefix = number > 0 ? "+" : "";
+        return `${prefix}${formatPrice(number)}`;
+      }
+
+      function formatSignedPercent(value) {
+        const number = Number(value);
+        if (!Number.isFinite(number)) return "-";
+        const prefix = number > 0 ? "+" : "";
+        return `${prefix}${formatPrice(number)}%`;
+      }
+
+      function formatAmount(value) {
+        const number = Number(value);
+        if (!Number.isFinite(number)) return "-";
+        if (Math.abs(number) >= 1e8) return `${trimFixed(number / 1e8)}亿`;
+        if (Math.abs(number) >= 1e4) return `${trimFixed(number / 1e4)}万`;
+        return trimFixed(number);
+      }
+
+      function setTone(element, value) {
+        const number = Number(value);
+        element.classList.remove("value-up", "value-down");
+        if (!Number.isFinite(number) || number === 0) return;
+        element.classList.add(number > 0 ? "value-up" : "value-down");
+      }
+
       function renderHeader() {
         const firstRow = [];
         const secondRow = [];
@@ -1578,7 +2471,13 @@
         }
         const html = data.map(row => {
           const cells = leafColumns.map(column => renderCell(row, column)).join("");
-          return `<tr>${cells}</tr>`;
+          const stockCode = String(row["SECURITY_CODE"] || "").trim();
+          const stockName = String(row["SECURITY_SHORT_NAME"] || "").trim();
+          const market = marketCodeForRow(row);
+          const rowAttrs = stockCode
+            ? ` data-stock-code="${escapeAttr(stockCode)}" data-stock-market="${escapeAttr(market)}" data-stock-name="${escapeAttr(stockName)}" tabindex="0"`
+            : "";
+          return `<tr${rowAttrs}>${cells}</tr>`;
         }).join("");
         return `<tbody>${html}</tbody>`;
       }
