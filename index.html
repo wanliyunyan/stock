@@ -925,9 +925,9 @@
         "TOAL_MARKET_VALUE<140>": { title: "总市值(日线不复权)", key: "TOAL_MARKET_VALUE<140>", dateMsg: "", sortable: true, unit: "元" }
       };
       const liveMetricQueryParts = [
-        "最近净资产收益率",
-        "最近毛利率",
-        "最近净利率"
+        "最新报告期净资产收益率",
+        "最新报告期毛利率",
+        "最新报告期净利率"
       ];
       const hiddenKeys = new Set([
         "MARKET_SHORT_NAME",
@@ -1747,7 +1747,34 @@
 
       function reportDateTitleText(column) {
         if (!column) return "";
-        return column.dateMsg || reportDateFromKey(column.key) || "";
+        return reportDateFromColumnValues(column) || column.dateMsg || reportDateFromKey(column.key) || "";
+      }
+
+      function reportDateFromColumnValues(column) {
+        if (!column || !column.key) return "";
+        return rows.reduce((latest, row) => {
+          const value = String(row[column.key] || "");
+          const reportText = value.includes("|") ? value.split("|").slice(1).join(" ") : "";
+          const title = reportDateFromPeriodText(reportText);
+          const candidate = parseReportDateValue(title);
+          if (!candidate) return latest;
+          return !latest || candidate.time > latest.time ? candidate : latest;
+        }, null)?.title || "";
+      }
+
+      function reportDateFromPeriodText(value) {
+        const text = String(value || "").trim();
+        const exact = parseReportDateValue(text);
+        if (exact) return exact.title;
+        const match = text.match(/(\d{4})\s*年?\s*(一季报|中报|半年报|三季报|年报)/);
+        if (!match) return "";
+        const year = match[1];
+        const period = match[2];
+        if (period === "一季报") return `${year}.3.31`;
+        if (period === "中报" || period === "半年报") return `${year}.6.30`;
+        if (period === "三季报") return `${year}.9.30`;
+        if (period === "年报") return `${year}.12.31`;
+        return "";
       }
 
       function reportDateFromKey(key) {
