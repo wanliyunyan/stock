@@ -571,8 +571,7 @@
     /*noinspection CssUnusedSymbol*/
     .sticky-serial {
       left: 0;
-      min-width: 52px;
-      width: 52px;
+      min-width: 42px;
       text-align: center;
     }
 
@@ -585,42 +584,26 @@
 
     /*noinspection CssUnusedSymbol*/
     .sticky-code {
-      left: 52px;
-      min-width: 96px;
-      width: 96px;
+      left: var(--sticky-code-left, 52px);
+      min-width: 74px;
       text-align: center;
     }
 
     /*noinspection CssUnusedSymbol*/
     .sticky-name {
-      left: 148px;
-      min-width: 136px;
-      width: 136px;
+      left: var(--sticky-name-left, 126px);
+      min-width: 86px;
       text-align: center;
     }
 
     /*noinspection CssUnusedSymbol*/
-    .col-growth {
-      min-width: 178px;
-      width: 178px;
-    }
-
-    /*noinspection CssUnusedSymbol*/
-    .col-contract {
-      min-width: 132px;
-      width: 132px;
-    }
-
-    /*noinspection CssUnusedSymbol*/
-    .col-wide {
-      min-width: 132px;
-      width: 132px;
-    }
-
-    /*noinspection CssUnusedSymbol*/
-    .col-realtime {
-      min-width: 144px;
-      width: 144px;
+    .col-growth,
+    .col-contract,
+    .col-wide,
+    .col-realtime,
+    .col-interval-change {
+      width: auto;
+      min-width: 0;
     }
 
     .chart-popover {
@@ -1195,6 +1178,8 @@
         "最新报告期毛利率",
         "最新报告期净利率"
       ];
+      const intervalChangeDays = [10, 20, 30, 60, 120, 250];
+      const intervalChangeQueryParts = intervalChangeDays.map(days => `近${days}日涨跌幅`);
       const hiddenKeys = new Set([
         "MARKET_SHORT_NAME",
         "MARKET_NUM",
@@ -1572,17 +1557,27 @@
       }
 
       function buildDisplayGroups(columns) {
+        const seenColumnKeys = new Set();
         const groups = columns.reduce((result, column) => {
           if (isHiddenColumn(column)) return result;
           if (Array.isArray(column.children) && column.children.length) {
-            const children = column.children.filter(child => !isHiddenColumn(child));
+            const children = column.children.filter(child => keepDisplayColumn(child, seenColumnKeys));
             if (children.length) result.push({ title: column.title, children });
           } else {
-            result.push({ title: column.title, column });
+            if (keepDisplayColumn(column, seenColumnKeys)) result.push({ title: column.title, column });
           }
           return result;
         }, []);
-        return orderDisplayGroups(groupGrowthRateColumns(groupReportMetricColumns(groupRealtimeQuoteColumns(groupContractLiabilityColumns(groups)))));
+        return orderDisplayGroups(groupIntervalChangeColumns(groupGrowthRateColumns(groupReportMetricColumns(groupRealtimeQuoteColumns(groupContractLiabilityColumns(groups))))));
+      }
+
+      function keepDisplayColumn(column, seenColumnKeys) {
+        if (isHiddenColumn(column)) return false;
+        const key = String(column.key || "");
+        if (!key) return true;
+        if (seenColumnKeys.has(key)) return false;
+        seenColumnKeys.add(key);
+        return true;
       }
 
       function groupContractLiabilityColumns(groups) {
@@ -1718,6 +1713,50 @@
         ];
       }
 
+      function groupIntervalChangeColumns(groups) {
+        const intervalColumns = [];
+        const otherGroups = [];
+        const seenDays = new Set();
+        groups.forEach(group => {
+          const columns = group.children || [group.column];
+          const matchedColumns = columns.filter(column => column && isIntervalChangeColumn(column.key));
+          if (matchedColumns.length) {
+            matchedColumns.forEach(column => {
+              const days = intervalChangeDaysForColumn(column);
+              const uniqueKey = days || column.key;
+              if (seenDays.has(uniqueKey)) return;
+              seenDays.add(uniqueKey);
+              intervalColumns.push(column);
+            });
+            const remainingColumns = columns.filter(column => column && !isIntervalChangeColumn(column.key));
+            if (remainingColumns.length) {
+              if (group.children) {
+                otherGroups.push({ ...group, children: remainingColumns });
+              } else {
+                otherGroups.push({ title: group.title, column: remainingColumns[0] });
+              }
+            }
+            return;
+          }
+          otherGroups.push(group);
+        });
+        if (!intervalColumns.length) return groups;
+        const orderedColumns = intervalChangeDays
+          .map(days => intervalColumns.find(column => intervalChangeDaysForColumn(column) === days))
+          .filter(Boolean);
+        const extraColumns = intervalColumns
+          .filter(column => !intervalChangeDays.includes(intervalChangeDaysForColumn(column)))
+          .sort((a, b) => intervalChangeDaysForColumn(a) - intervalChangeDaysForColumn(b));
+        return [
+          ...otherGroups,
+          {
+            title: "近N日涨跌幅",
+            children: [...orderedColumns, ...extraColumns],
+            childLabelMode: "title"
+          }
+        ];
+      }
+
       function realtimeQuoteGroupTitle(columns) {
         return activeSource.realtimeQuoteTime ||
           activeSource.quoteTime ||
@@ -1756,6 +1795,7 @@
         if (String(key || "").startsWith("XSJLL")) return 9;
         if (String(key || "").includes("同比增长率")) return 10;
         if (String(key || "").includes("环比增长率")) return 11;
+        if (isIntervalChangeColumn(key)) return 1100;
         return 1000;
       }
 
@@ -1898,6 +1938,7 @@
           growthCondition("合同负债环比增长", qoqThresholdInput, document.getElementById("qoqMaxInput")),
           growthCondition("合同负债同比增长", yoyThresholdInput, document.getElementById("yoyMaxInput")),
           ...liveMetricQueryParts,
+          ...intervalChangeQueryParts,
           "不要ST股及不要退市股",
           "不要北交所"
         ];
@@ -1970,10 +2011,20 @@
       function render() {
         const filtered = getFilteredRows();
         table.innerHTML = `${renderHeader()}${renderBody(filtered)}`;
+        updateStickyOffsets();
         setTableLoadingOverlay(dataStatus.type === "loading" && rows.length > 0);
         table.querySelectorAll("[data-sort-key]").forEach(button => {
           button.addEventListener("click", () => sortBy(button.dataset.sortKey));
         });
+      }
+
+      function updateStickyOffsets() {
+        const serialColumn = table.querySelector("thead .sticky-serial");
+        const codeColumn = table.querySelector("thead .sticky-code");
+        const serialWidth = serialColumn ? Math.ceil(serialColumn.getBoundingClientRect().width) : 52;
+        const codeWidth = codeColumn ? Math.ceil(codeColumn.getBoundingClientRect().width) : 74;
+        table.style.setProperty("--sticky-code-left", `${serialWidth}px`);
+        table.style.setProperty("--sticky-name-left", `${serialWidth + codeWidth}px`);
       }
 
       function setTableLoadingOverlay(isVisible) {
@@ -2608,6 +2659,7 @@
         if (column.key === "TOAL_MARKET_VALUE<140>") return "总市值";
         if (column.key === "PE_DYNAMIC") return "市盈率(动)";
         if (column.key === "PB") return "市净率";
+        if (isIntervalChangeColumn(column.key)) return intervalChangeTitle(column);
         if (String(column.key || "").includes("同比增长率")) return "合同负债同比增长率";
         if (String(column.key || "").includes("环比增长率")) return "合同负债环比增长率";
         if (String(column.key || "").startsWith("XSMLL")) return "毛利率";
@@ -2633,6 +2685,24 @@
       function isGrowthRateColumn(key) {
         const value = String(key || "");
         return value.includes("同比增长率") || value.includes("环比增长率");
+      }
+
+      function isIntervalChangeColumn(key) {
+        return String(key || "").startsWith("INTERVAL_CHG");
+      }
+
+      function intervalChangeTitle(column) {
+        const days = intervalChangeDaysForColumn(column);
+        return days ? `近${days}日` : (column.title || "区间涨跌幅");
+      }
+
+      function intervalChangeDaysForColumn(column) {
+        const key = String(column && column.key ? column.key : column || "");
+        const keyMatch = key.match(/INTERVAL_CHG[{][^}]*[|](\d+)[|]天[}]/);
+        if (keyMatch) return Number(keyMatch[1]);
+        const text = String(column && column.title ? column.title : "");
+        const titleMatch = text.match(/近\s*(\d+)\s*日/);
+        return titleMatch ? Number(titleMatch[1]) : 0;
       }
 
       function reportPeriodForColumn(key) {
@@ -2728,6 +2798,7 @@
       function widthClassFor(key) {
         if (["SERIAL", "SECURITY_CODE", "SECURITY_SHORT_NAME"].includes(key)) return "";
         if (realtimeQuoteKeys.includes(key)) return "col-realtime";
+        if (isIntervalChangeColumn(key)) return "col-interval-change";
         if (key.includes("同比增长率") || key.includes("环比增长率")) return "col-growth";
         if (key.startsWith("CONTRACTLIAB")) return "col-contract";
         return "col-wide";
@@ -2740,7 +2811,7 @@
       }
 
       function toneClassFor(value, column) {
-        if (!column["redGreenAble"]) return "";
+        if (!column["redGreenAble"] && !isIntervalChangeColumn(column.key)) return "";
         const numeric = numericValue(value);
         if (Number.isNaN(numeric) || numeric === 0) return "";
         return numeric > 0 ? "value-up" : "value-down";
