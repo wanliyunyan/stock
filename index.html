@@ -159,22 +159,23 @@
     .remote-count {
       flex: 0 0 auto;
       display: inline-flex;
-      align-items: baseline;
-      gap: 4px;
+      align-items: center;
+      gap: 3px;
       min-height: 24px;
       padding-left: 8px;
       border-left: 1px solid var(--line-strong);
       color: var(--muted);
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 700;
-      line-height: 1.2;
+      line-height: 1.65;
       white-space: nowrap;
     }
 
     .remote-count strong {
-      color: var(--text);
-      font-size: 16px;
-      line-height: 1;
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 750;
+      line-height: inherit;
       font-variant-numeric: tabular-nums;
     }
 
@@ -878,15 +879,6 @@
       box-shadow: 0 10px 24px rgba(31, 41, 55, 0.12);
     }
 
-    .footer {
-      width: 100%;
-      margin: 12px 0 0;
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.55;
-      flex: 0 0 auto;
-    }
-
     @media (max-width: 980px) {
       .page {
         padding: 12px;
@@ -1079,8 +1071,6 @@
         </div>
       </section>
     </main>
-
-    <footer class="footer" id="footerText"></footer>
   </div>
 
   <div class="chart-popover" id="chartPopover" role="dialog" aria-live="polite" aria-label="股票K线预览" hidden>
@@ -1579,11 +1569,6 @@
         document.getElementById("quoteTime").textContent = activeSource.quoteTime || activeSource.searchCodeTime || "-";
         document.getElementById("sourceId").textContent = activeSource.originalXcId || activeSource.resultXcId || sourceMeta.originalXcId || "-";
         document.getElementById("sourceLink").href = activeSource.sourceUrl || sourceMeta.sourceUrl || "#";
-        const timeText = activeSource.searchCodeTime || activeSource.quoteTime || "-";
-        const sourceText = "东方财富实时数据";
-        const errorText = dataStatus.error ? `；实时数据加载失败：${dataStatus.error}` : "";
-        document.getElementById("footerText").textContent =
-          `${sourceText}；结果刷新时间：${timeText}${errorText}`;
       }
 
       function buildDisplayGroups(columns) {
