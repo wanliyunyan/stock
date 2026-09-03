@@ -197,6 +197,22 @@
       font-weight: 700;
     }
 
+    .band-note {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 0 2px;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .band-note-local {
+      color: var(--muted);
+    }
+
     .query-rest {
       flex: 0 0 auto;
       line-height: 1.65;
@@ -702,6 +718,10 @@
         grid-template-columns: 1fr;
       }
 
+      .band-note {
+        white-space: normal;
+      }
+
       .filter-grid {
         grid-template-columns: 1fr;
       }
@@ -760,6 +780,7 @@
     <main>
       <section class="query-band">
         <div class="query-controls" aria-label="合同负债筛选条件">
+          <span class="band-note band-note-remote">远程筛选东财数据</span>
           <span class="query-rest">不要ST股及不要退市股；不要北交所</span>
           <label class="range-filter online-filter">
             <span class="range-label">合同负债同比增长率</span>
@@ -780,6 +801,7 @@
       </section>
 
       <section class="filter-panel" aria-label="指标筛选">
+        <div class="band-note band-note-local">下面是本地数据筛选，只过滤已经加载到页面的数据</div>
         <div class="filter-row">
           <div class="filter-grid">
             <label class="range-filter search-filter">
@@ -903,9 +925,9 @@
         "TOAL_MARKET_VALUE<140>": { title: "总市值(日线不复权)", key: "TOAL_MARKET_VALUE<140>", dateMsg: "", sortable: true, unit: "元" }
       };
       const liveMetricQueryParts = [
-        "2026年半年报净资产收益率",
-        "2026年半年报毛利率",
-        "2026年半年报净利率"
+        "最近净资产收益率",
+        "最近毛利率",
+        "最近净利率"
       ];
       const hiddenKeys = new Set([
         "MARKET_SHORT_NAME",
@@ -1258,18 +1280,33 @@
       function groupReportMetricColumns(groups) {
         const metricColumns = [];
         const otherGroups = [];
+        const seenKeys = new Set();
         groups.forEach(group => {
-          if (!group.children && group.column && isReportMetricColumn(group.column.key)) {
-            metricColumns.push(group.column);
+          const columns = group.children || [group.column];
+          const reportColumns = columns.filter(column => column && isReportMetricColumn(column.key));
+          if (reportColumns.length) {
+            reportColumns.forEach(column => {
+              if (seenKeys.has(column.key)) return;
+              seenKeys.add(column.key);
+              metricColumns.push(column);
+            });
+            const remainingColumns = columns.filter(column => column && !isReportMetricColumn(column.key));
+            if (remainingColumns.length) {
+              if (group.children) {
+                otherGroups.push({ ...group, children: remainingColumns });
+              } else {
+                otherGroups.push({ title: group.title, column: remainingColumns[0] });
+              }
+            }
             return;
           }
           otherGroups.push(group);
         });
         if (!metricColumns.length) return groups;
         const children = reportMetricPrefixes
-          .map(prefix => metricColumns.find(column => String(column.key || "").startsWith(prefix)))
+          .map(prefix => latestReportMetricColumnForPrefix(metricColumns, prefix))
           .filter(Boolean);
-        if (!children.length) return groups;
+        if (!children.length) return otherGroups;
         return [
           ...otherGroups,
           {
@@ -1278,6 +1315,20 @@
             childLabelMode: "title"
           }
         ];
+      }
+
+      function latestReportMetricColumnForPrefix(columns, prefix) {
+        return columns
+          .filter(column => String(column.key || "").startsWith(prefix))
+          .reduce((latest, column) => {
+            if (!latest) return column;
+            return reportDateSortValue(column) > reportDateSortValue(latest) ? column : latest;
+          }, null);
+      }
+
+      function reportDateSortValue(column) {
+        const parsed = parseReportDateValue(reportDateTitleText(column));
+        return parsed ? parsed.time : -Infinity;
       }
 
       function groupGrowthRateColumns(groups) {
