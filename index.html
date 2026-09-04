@@ -1156,6 +1156,7 @@
       const liveRefreshMs = 60 * 1000;
       const chartHoverDelayMs = 180;
       const chartHideDelayMs = 180;
+      const defaultApiBaseUrl = "https://stock.88527712pan.workers.dev";
       const chartPeriods = {
         "101": { label: "日K", limit: 90 },
         "102": { label: "周K", limit: 90 },
@@ -1404,7 +1405,7 @@
           }
           return requested;
         }
-        return readStoredApiBaseUrl();
+        return readStoredApiBaseUrl() || defaultApiBaseUrl;
       }
 
       function readStoredApiBaseUrl() {
