@@ -1198,14 +1198,11 @@
       const eastmoneyQuoteApi = "https://push2.eastmoney.com/api/qt/ulist.np/get";
       const eastmoneyKlineApi = "https://push2his.eastmoney.com/api/qt/stock/kline/get";
       const livePageSize = 5000;
-      const quoteFields = "f12,f13,f14,f2,f20,f23,f115,f124";
+      const quoteFields = "f12,f13,f14,f2,f3,f4,f20,f23,f115,f124";
       const klineFields1 = "f1,f2,f3,f4,f5,f6";
       const klineFields2 = "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61";
       const quoteBatchSize = 80;
-      const searchCacheTtlMs = 5 * 60 * 1000;
-      const rateLimitBaseMs = 5 * 60 * 1000;
       const searchGapMs = 2000;
-      const maxSnapshotAgeMs = 24 * 60 * 60 * 1000;
       const chartHoverDelayMs = 180;
       const chartHideDelayMs = 180;
       const defaultApiBaseUrl = "https://stock.88527712pan.workers.dev";
@@ -1287,11 +1284,9 @@
       let liveInFlight = false;
       let livePending = false;
       let searchQueue = Promise.resolve();
-      let searchGate = {};
+      let lastSearchRequestAt = 0;
       let clientFingerprint = "";
-      const searchCache = new Map();
       let chartRequestId = 0;
-      const chartCache = new Map();
       const chartState = {
         rowElement: null,
         code: "",
@@ -1309,7 +1304,7 @@
 
       applyData(emptySource, { type: "loading", error: "" });
       if (apiBaseUrl || isLocalDev) {
-        restoreSavedSource();
+        clearLegacyDataCache();
         refreshLiveData();
       } else {
         applyData(emptySource, { type: "error", error: "请先配置 Worker 地址，例如 ?api=https://xxx.workers.dev" });
@@ -1346,28 +1341,6 @@
         render();
       }
 
-      async function enrichRealtimeQuoteData(source) {
-        if (!source || !Array.isArray(source.rows) || !source.rows.length) return source;
-        const sourceWithRealtimeDates = applyRealtimeColumnDates(source, source.realtimeQuoteTime || source.quoteTime || source.searchCodeTime);
-        let quoteData = null;
-        try {
-          quoteData = await fetchRealtimeQuotes(sourceWithRealtimeDates.rows);
-        } catch (error) {
-          console.warn("Realtime quote enrichment failed:", error);
-          return sourceWithRealtimeDates;
-        }
-        if (!quoteData || !Array.isArray(quoteData.rows) || !quoteData.rows.length) return sourceWithRealtimeDates;
-        return mergeRealtimeQuoteData(sourceWithRealtimeDates, quoteData);
-      }
-
-      function applyRealtimeColumnDates(source, dateText) {
-        if (!source || !dateText) return source;
-        return {
-          ...source,
-          columns: (source.columns || []).map(column => applyRealtimeColumnDate(column, dateText))
-        };
-      }
-
       function applyRealtimeColumnDate(column, dateText) {
         if (!column) return column;
         if (Array.isArray(column.children)) {
@@ -1376,41 +1349,66 @@
         return realtimeQuoteKeys.includes(column.key) ? { ...column, dateMsg: dateText } : column;
       }
 
-      async function fetchRealtimeQuotes(sourceRows) {
-        if (!(location.protocol === "http:" || location.protocol === "https:")) return null;
+      async function fetchRealtimeQuotes(sourceRows, isCurrent = () => true) {
         const securities = uniqueSecurities(sourceRows);
-        if (!securities.length) return null;
-        return requestEastmoneyQuotes(securities);
+        return requestEastmoneyQuotes(securities, isCurrent);
+      }
+
+      function isPriceRelatedKey(key) {
+        return realtimeQuoteKeys.includes(key) || ["CHG", "PCHG"].includes(key) ||
+          String(key).startsWith("DIVIDEND_NEWRATIO_HYY") || isValuationPercentileColumn(key) || isIntervalChangeColumn(key);
+      }
+
+      function markPreviousPriceData(source) {
+        return {
+          ...source,
+          quoteStatus: { type: "loading" },
+          rows: source.rows.map(row => ({ ...row,
+            priceDataTime: row.priceDataTime || source.realtimeQuoteTime || source.quoteTime || source.searchCodeTime || "",
+            stalePriceKeys: Object.keys(row).filter(isPriceRelatedKey) }))
+        };
       }
 
       function mergeRealtimeQuoteData(source, quoteData) {
-        const quotesByCode = new Map(quoteData.rows.map(row => [String(row.code || ""), row]));
-        const quoteDateTime = quoteData.quoteTime || source.realtimeQuoteTime || source.quoteTime || source.searchCodeTime || quoteData.quoteMinute || "";
-        const existingKeys = new Set((source.columns || []).map(column => column.key));
-        const quoteColumns = realtimeQuoteKeys
-          .filter(key => !existingKeys.has(key))
-          .map(key => {
-            const template = realtimeQuoteColumnTemplates[key];
-            return template ? { ...template, dateMsg: quoteDateTime || template.dateMsg } : null;
-          })
-          .filter(Boolean);
-        const mergedColumns = (source.columns || [])
-          .map(column => realtimeQuoteKeys.includes(column.key) ? { ...column, dateMsg: quoteDateTime || column.dateMsg } : column)
-          .concat(quoteColumns);
+        const quotesByCode = new Map(quoteData.rows.map(row => [`${row.market}.${row.code}`, row]));
+        let updatedCount = 0;
+        let latestUpdatedAt = 0;
         const mergedRows = source.rows.map(row => {
-          const quote = quotesByCode.get(String(row["SECURITY_CODE"] || ""));
-          if (!quote) return row;
-          const mergedRow = { ...row };
-          if (isUsableQuoteValue(quote.newestPrice)) mergedRow.NEWEST_PRICE = formatRealtimeNumber(quote.newestPrice);
-          if (isUsableQuoteValue(quote.peDynamic)) mergedRow.PE_DYNAMIC = formatRealtimeNumber(quote.peDynamic);
-          if (isUsableQuoteValue(quote.pb)) mergedRow.PB = formatRealtimeNumber(quote.pb);
-          if (isUsableQuoteValue(quote.totalMarketValue)) mergedRow["TOAL_MARKET_VALUE<140>"] = formatMarketValue(quote.totalMarketValue);
+          const quote = quotesByCode.get(`${marketCodeForRow(row)}.${String(row.SECURITY_CODE || "").trim()}`);
+          const fields = {
+            NEWEST_PRICE: quote?.newestPrice, PE_DYNAMIC: quote?.peDynamic, PB: quote?.pb,
+            "TOAL_MARKET_VALUE<140>": quote?.totalMarketValue, CHG: quote?.change, PCHG: quote?.pctChange
+          };
+          // A missing/older quote must never relabel retained prices as current.
+          if (!quote || !isUsableQuoteValue(quote.newestPrice) || !(quote.updatedAt > 0) ||
+              quote.updatedAt < (row.realtimeUpdatedAt || 0)) {
+            return { ...row,
+              priceDataTime: row.priceDataTime || source.realtimeQuoteTime || source.quoteTime || source.searchCodeTime || "",
+              stalePriceKeys: [...new Set([...(row.stalePriceKeys || []), ...Object.keys(fields)])] };
+          }
+          updatedCount++;
+          latestUpdatedAt = Math.max(latestUpdatedAt, quote.updatedAt);
+          const mergedRow = { ...row, realtimeUpdatedAt: quote.updatedAt,
+            priceDataTime: formatQuoteDateTime(quote.updatedAt),
+            stalePriceKeys: (row.stalePriceKeys || []).filter(key => !Object.hasOwn(fields, key)) };
+          for (const [key, value] of Object.entries(fields)) {
+            mergedRow[key] = !isUsableQuoteValue(value) ? null :
+              key === "TOAL_MARKET_VALUE<140>" ? formatMarketValue(value) : formatRealtimeNumber(value);
+          }
           return mergedRow;
         });
+        const quoteDateTime = latestUpdatedAt ? formatQuoteDateTime(latestUpdatedAt) :
+          source.realtimeQuoteTime || source.quoteTime || source.searchCodeTime || "";
+        const existingKeys = new Set((source.columns || []).flatMap(column => column.children || [column]).map(column => column.key));
+        const mergedColumns = (source.columns || []).map(column => applyRealtimeColumnDate(column, quoteDateTime))
+          .concat(realtimeQuoteKeys.filter(key => !existingKeys.has(key))
+            .map(key => ({ ...realtimeQuoteColumnTemplates[key], dateMsg: quoteDateTime })));
         return {
           ...source,
-          quoteTime: quoteData.quoteTime || source.quoteTime,
-          realtimeQuoteTime: quoteData.quoteTime || "",
+          quoteTime: updatedCount ? quoteDateTime : source.quoteTime,
+          realtimeQuoteTime: updatedCount ? quoteDateTime : source.realtimeQuoteTime || "",
+          quoteStatus: { type: updatedCount === source.rows.length ? "live" : updatedCount ? "partial" : "error",
+            updatedCount, total: source.rows.length, error: (quoteData.errors || []).join("；") },
           columns: mergedColumns,
           rows: mergedRows
         };
@@ -1444,7 +1442,7 @@
       }
 
       function isUsableQuoteValue(value) {
-        return value !== null && value !== undefined && value !== "" && value !== "-";
+        return value !== null && value !== undefined && String(value).trim() !== "" && Number.isFinite(Number(value));
       }
 
       function formatRealtimeNumber(value) {
@@ -1484,47 +1482,51 @@
         throw new Error("请先配置 Worker 地址，例如 ?api=https://xxx.workers.dev");
       }
 
-      async function requestEastmoneyQuotes(securities) {
+      async function requestEastmoneyQuotes(securities, isCurrent = () => true) {
         const rows = [];
+        const errors = [];
         let latestUpdatedAt = 0;
         for (let index = 0; index < securities.length; index += quoteBatchSize) {
+          if (!isCurrent()) break;
           const batch = securities.slice(index, index + quoteBatchSize);
           const secids = batch.map(item => `${item.market}.${item.code}`).join(",");
-          const url = `${stockApiUrl("/api/quotes", eastmoneyQuoteApi)}?fltt=2&invt=2&fields=${quoteFields}&secids=${encodeURIComponent(secids)}`;
-          const response = await fetch(url, {
-            headers: {
-              "Accept": "application/json, text/plain, */*"
-            }
-          });
-          const responseText = await response.text();
-          if (!response.ok) {
-            throw new Error(responseText || `HTTP ${response.status}`);
-          }
-          const apiData = parseJsonResponse(responseText, "行情接口返回格式异常");
-          const payload = apiData && apiData["data"];
-          const diff = payload && payload["diff"];
-          if (!Array.isArray(diff)) {
-            throw new Error((apiData && apiData["msg"]) || "行情接口未返回数据");
-          }
-          diff.forEach(item => {
-            const updatedAt = Number(item["f124"]) || 0;
-            if (updatedAt > latestUpdatedAt) latestUpdatedAt = updatedAt;
-            rows.push({
-              code: String(item["f12"] || ""),
-              market: String(item["f13"] ?? ""),
-              name: item["f14"] || "",
-              newestPrice: item["f2"],
-              totalMarketValue: item["f20"],
-              pb: item["f23"],
-              peDynamic: item["f115"],
-              updatedAt
+          const url = `${stockApiUrl("/api/quotes", eastmoneyQuoteApi)}?fltt=2&invt=2&fields=${quoteFields}&secids=${encodeURIComponent(secids)}&_=${createRequestId()}`;
+          const controller = new AbortController();
+          const timeout = window.setTimeout(() => controller.abort(), 30000);
+          try {
+            const response = await fetch(url, {
+              cache: "no-store",
+              signal: controller.signal,
+              headers: { "Accept": "application/json, text/plain, */*" }
             });
-          });
+            const responseText = await response.text();
+            if (!response.ok) throw new Error(response.status === 429 ? "东方财富行情查询频率受限" : `行情接口请求失败（状态码 ${response.status}）`);
+            const apiData = parseJsonResponse(responseText, "行情接口返回格式异常");
+            if (["307", "429"].includes(String(apiData?.code))) throw new Error("东方财富行情查询频率受限");
+            const diff = apiData?.data?.diff;
+            if (!Array.isArray(diff) || !diff.length || (apiData.rc !== undefined && Number(apiData.rc) !== 0)) {
+              throw new Error(apiData?.msg || "行情接口未返回数据");
+            }
+            diff.forEach(item => {
+              if (!batch.some(security => security.code === String(item.f12) && security.market === String(item.f13))) return;
+              const updatedAt = Number(item.f124) || 0;
+              if (updatedAt > latestUpdatedAt) latestUpdatedAt = updatedAt;
+              rows.push({
+                code: String(item.f12 || ""), market: String(item.f13 ?? ""), name: item.f14 || "",
+                newestPrice: item.f2, change: item.f4, pctChange: item.f3,
+                totalMarketValue: item.f20, pb: item.f23, peDynamic: item.f115, updatedAt
+              });
+            });
+          } catch (error) {
+            errors.push(cleanError(error));
+          } finally {
+            window.clearTimeout(timeout);
+          }
         }
         return {
           quoteTime: latestUpdatedAt ? formatQuoteDateTime(latestUpdatedAt) : "",
-          quoteMinute: latestUpdatedAt ? formatQuoteMinute(latestUpdatedAt) : "",
-          rows
+          rows,
+          errors
         };
       }
 
@@ -1537,7 +1539,8 @@
           klt: selectedPeriod,
           fqt: "1",
           end: "20500101",
-          lmt: String(chartPeriods[selectedPeriod].limit)
+          lmt: String(chartPeriods[selectedPeriod].limit),
+          _: createRequestId()
         });
         const response = await fetch(`${eastmoneyKlineApi}?${params.toString()}`, {
           signal,
@@ -2060,34 +2063,46 @@
 
       async function refreshLiveData() {
         if (liveInFlight) { livePending = true; return; }
-        const requestId = liveRequestId;
+        const requestId = ++liveRequestId;
         const query = buildLiveQuery();
         const supplementalQueries = buildSupplementalMetricQueries();
         const isCurrent = () => requestId === liveRequestId;
         liveInFlight = true;
         livePending = false;
-        try {
-          const liveSource = await fetchLiveSource(query, supplementalQueries, isCurrent);
-          if (!isCurrent()) return;
-          if (liveSource.refreshError) {
-            // Keep a complete previous result when only part of the new result arrived.
-            if (activeSource.query !== query || !activeSource.rows.length) {
-              applyData(liveSource, { type: "live", error: "" });
-            }
-            showRefreshFailure(liveSource.refreshError);
-          } else {
-            applyData(liveSource, { type: "live", error: "" });
-            const savedAt = Date.now();
-            writeStoredData("snapshot", { savedAt, source: liveSource });
-            enrichRealtimeQuoteData(liveSource).then(sourceWithQuotes => {
-              if (!isCurrent() || activeSource !== liveSource) return;
-              applyData(sourceWithQuotes, dataStatus);
-              writeStoredData("snapshot", { savedAt, source: sourceWithQuotes });
-            }).catch(error => console.warn("Realtime quote update failed:", error));
+        const quoteRequests = new Map();
+        const quoteKey = source => uniqueSecurities(source.rows).map(item => `${item.market}.${item.code}`).sort().join(",");
+        const loadQuotes = source => {
+          if (!source.rows.length || !isCurrent()) return Promise.resolve(null);
+          const key = quoteKey(source);
+          if (!quoteRequests.has(key)) {
+            const pending = fetchRealtimeQuotes(source.rows, isCurrent)
+              .catch(error => ({ rows: [], errors: [cleanError(error)] }))
+              .then(quoteData => {
+                if (isCurrent() && quoteKey(activeSource) === key) {
+                  applyData(mergeRealtimeQuoteData(activeSource, quoteData), dataStatus);
+                }
+                return quoteData;
+              });
+            quoteRequests.set(key, pending);
           }
+          return quoteRequests.get(key);
+        };
+        applyData(markPreviousPriceData(activeSource), { type: "loading", error: "" });
+        // The quote endpoint is independent of search throttling and financial queries.
+        const previousQuotes = loadQuotes(activeSource);
+        try {
+          const liveSource = await fetchLiveSource(query, supplementalQueries, isCurrent, loadQuotes);
+          if (!isCurrent()) return;
+          // Use fresh price-dependent supplements even if a later financial request failed.
+          const quoteData = await loadQuotes(liveSource);
+          if (!isCurrent()) return;
+          const sourceWithQuotes = quoteData ? mergeRealtimeQuoteData(liveSource, quoteData) : liveSource;
+          applyData(sourceWithQuotes, { type: "live", error: "" });
+          if (liveSource.refreshError) showRefreshFailure(liveSource.refreshError);
         } catch (error) {
-          if (requestId !== liveRequestId) return;
+          if (!isCurrent()) return;
           showRefreshFailure(error);
+          await previousQuotes;
         } finally {
           liveInFlight = false;
           // Only continue when the user committed another query during this request.
@@ -2100,29 +2115,20 @@
         render();
       }
 
-      function readStoredData(name) {
-        try { return JSON.parse(window.localStorage.getItem(`stock.v2.${apiBaseUrl}.${name}`)); }
-        catch { return null; }
+      function clearLegacyDataCache() {
+        try {
+          for (const name of ["search-cache", "snapshot", "search-gate"]) {
+            window.localStorage.removeItem(`stock.v2.${apiBaseUrl}.${name}`);
+          }
+        } catch { /* Data loading does not depend on browser storage. */ }
       }
 
-      function writeStoredData(name, value) {
-        try { window.localStorage.setItem(`stock.v2.${apiBaseUrl}.${name}`, JSON.stringify(value)); }
-        catch { /* Storage may be disabled or full; in-memory safeguards still apply. */ }
-      }
-
-      function restoreSavedSource() {
-        const snapshot = readStoredData("snapshot");
-        if (!snapshot || snapshot.source?.query !== buildLiveQuery() ||
-            !Array.isArray(snapshot.source.rows) || !Array.isArray(snapshot.source.columns) ||
-            !Number.isFinite(snapshot.savedAt) || snapshot.savedAt > Date.now() || Date.now() - snapshot.savedAt > maxSnapshotAgeMs) return;
-        applyData(snapshot.source, { type: "cached", error: "" });
-      }
-
-      async function fetchLiveSource(query, supplementalQueries, isCurrent = () => true) {
+      async function fetchLiveSource(query, supplementalQueries, isCurrent = () => true, onBaseSource = () => {}) {
         const apiData = await requestEastmoney(query);
         const source = normalizeEastmoneyResponse(apiData, query);
         const years = cashConversionYears();
         if (!isCurrent() || !source.rows.length) return addCashConversionMetric(source, { rows: [], failed: false }, years);
+        onBaseSource(source);
         const mergedSource = await fetchSupplementalMetricSource(source, supplementalQueries, isCurrent);
         if (!isCurrent() || mergedSource.refreshError) return addCashConversionMetric(mergedSource, { rows: [], failed: true }, years);
         const cashConversionData = await fetchCashConversionData(source, years);
@@ -2268,34 +2274,20 @@
         return pending;
       }
 
-      function readSearchGate() {
-        const saved = readStoredData("search-gate") || {};
-        if ((saved.updatedAt || 0) >= (searchGate.updatedAt || 0)) searchGate = saved;
-        return searchGate;
-      }
-
       function rateLimitError(retryAt) {
         return Object.assign(new Error("东方财富查询频率受限"), { retryAt });
       }
 
       async function requestEastmoneyOnce(query) {
-        const stored = readStoredData("search-cache") || [];
-        const cached = [searchCache.get(query), Array.isArray(stored) && stored.find(item => item.query === query)]
-          .filter(Boolean).sort((a, b) => b.savedAt - a.savedAt)[0];
-        if (cached && Date.now() - cached.savedAt >= 0 && Date.now() - cached.savedAt < searchCacheTtlMs) return cached.data;
-        let gate = readSearchGate();
-        if (gate.retryAt > Date.now()) throw rateLimitError(gate.retryAt);
-        const gap = (gate.lastRequestAt || 0) + searchGapMs - Date.now();
+        const gap = lastSearchRequestAt + searchGapMs - Date.now();
         if (gap > 0) await new Promise(resolve => window.setTimeout(resolve, gap));
-        gate = readSearchGate();
-        if (gate.retryAt > Date.now()) throw rateLimitError(gate.retryAt);
-        searchGate = { ...gate, lastRequestAt: Date.now(), updatedAt: Date.now() };
-        writeStoredData("search-gate", searchGate);
+        lastSearchRequestAt = Date.now();
         const controller = new AbortController();
         const timeout = window.setTimeout(() => controller.abort(), 30000);
         try {
           const response = await fetch(stockApiUrl("/api/stocks", eastmoneySearchApi), {
             method: "POST",
+            cache: "no-store",
             headers: {
               "Accept": "application/json, text/plain, */*",
               "Content-Type": "application/json;charset=UTF-8"
@@ -2307,27 +2299,16 @@
           let data;
           try { data = JSON.parse(responseText); } catch { /* Report non-JSON errors below. */ }
           if (response.status === 429 || String(data?.code) === "307") {
-            const failures = (gate.failures || 0) + 1;
             const retryHeader = response.headers?.get("Retry-After");
             const retryDelay = /^\d+(?:\.\d+)?$/.test(retryHeader || "")
               ? Number(retryHeader) * 1000 : Math.max(0, Date.parse(retryHeader) - Date.now()) || 0;
-            const retryAt = Date.now() + Math.max(retryDelay, Math.min(rateLimitBaseMs * 2 ** (failures - 1), 30 * 60 * 1000));
-            searchGate = { ...searchGate, retryAt, failures, updatedAt: Date.now() };
-            writeStoredData("search-gate", searchGate);
-            throw rateLimitError(retryAt);
+            throw rateLimitError(retryDelay ? Date.now() + retryDelay : 0);
           }
           if (!response.ok) {
             throw new Error(responseText || `HTTP ${response.status}`);
           }
           data = data || parseJsonResponse(responseText, "选股接口返回格式异常");
-          // Only valid table responses may enter the cache.
           normalizeEastmoneyResponse(data, query);
-          const entry = { query, savedAt: Date.now(), data };
-          searchCache.set(query, entry);
-          if (searchCache.size > 8) searchCache.delete(searchCache.keys().next().value);
-          writeStoredData("search-cache", [...(Array.isArray(stored) ? stored : []).filter(item => item.query !== query && Date.now() - item.savedAt < searchCacheTtlMs), entry].slice(-8));
-          searchGate = { ...searchGate, retryAt: 0, failures: 0, updatedAt: Date.now() };
-          writeStoredData("search-gate", searchGate);
           return data;
         } finally {
           window.clearTimeout(timeout);
@@ -2518,8 +2499,16 @@
         const notice = document.getElementById("dataNotice");
         const previousQuery = activeSource.query && activeSource.query !== buildLiveQuery();
         const messages = [];
-        if (dataStatus.error) messages.push(`更新未完成：${dataStatus.error}。`);
-        if (dataStatus.type === "cached") messages.push("已显示本机上次成功加载的数据。");
+        if (dataStatus.error) messages.push(`选股/财务更新未完成：${dataStatus.error}。`);
+        const quoteStatus = activeSource.quoteStatus;
+        if (rows.length && quoteStatus?.type === "loading") messages.push("正在获取最新行情，标记“未更新”的数值尚未更新。");
+        if (quoteStatus?.type === "live" && dataStatus.type !== "live") messages.push("最新价、市盈率、市净率、总市值及当日涨跌幅已更新。");
+        if (quoteStatus?.type === "partial" || quoteStatus?.type === "error") {
+          messages.push(`行情更新${quoteStatus.type === "partial" ? "不完整" : "失败"}：${quoteStatus.updatedCount}/${quoteStatus.total} 只股票已更新，其余数值未取得最新行情确认，已标记“未更新”。${quoteStatus.error ? `原因：${quoteStatus.error}。` : ""}可手动刷新页面重试。`);
+        }
+        if (rows.some(row => row.stalePriceKeys?.some(key => !realtimeQuoteKeys.includes(key) && !["CHG", "PCHG"].includes(key)))) {
+          messages.push("部分股息率、估值分位或区间涨跌幅仍为上次数据，已在对应数值旁标记。");
+        }
         if (previousQuery) messages.push("当前显示上次查询结果，新筛选条件尚未加载成功。");
         else if (dataStatus.error && rows.length) messages.push("暂时保留已加载结果，财务数据可能未更新。");
         if (dataStatus.retryAt) messages.push(`可在 ${new Date(dataStatus.retryAt).toLocaleTimeString("zh-CN", { hour12: false })} 后手动刷新页面重试。`);
@@ -2715,23 +2704,16 @@
           name: chartState.name
         };
         const period = chartState.period;
-        const cacheKey = `${stock.market}.${stock.code}.${period}`;
-        const cached = chartCache.get(cacheKey);
         chartState.rows = [];
         setChartHeader({ ...stock, rowData: rowDataForPreview(stock.code) });
         chartStatus.textContent = `${chartPeriods[period].label} 前复权，正在加载`;
         showChartMessage("正在加载K线...");
         drawEmptyKlineChart();
-        if (cached) {
-          renderChartData(cached);
-          return;
-        }
         if (chartState.abortController) chartState.abortController.abort();
         chartState.abortController = new AbortController();
         try {
           const data = await requestEastmoneyKlines(stock, period, chartState.abortController.signal);
           if (requestId !== chartRequestId || stock.code !== chartState.code || period !== chartState.period) return;
-          chartCache.set(cacheKey, data);
           renderChartData(data);
         } catch (error) {
           if (error && error.name === "AbortError") return;
@@ -3140,7 +3122,10 @@
         const alignClass = alignClassFor(key);
         const toneClass = toneClassFor(row[key], column);
         const content = formatValue(row[key], column, row);
-        return `<td class="${stickyClass} ${widthClass} ${alignClass} ${toneClass}">${content}</td>`;
+        const stale = row.stalePriceKeys?.includes(key);
+        const quoteDate = realtimeQuoteKeys.includes(key) ? row.priceDataTime || "" : "";
+        const title = [stale ? "本次未更新，未取得最新数据确认" : "", quoteDate ? `行情时间：${quoteDate}` : ""].filter(Boolean).join("；");
+        return `<td class="${stickyClass} ${widthClass} ${alignClass} ${toneClass}"${title ? ` title="${escapeAttr(title)}"` : ""}>${content}${stale ? '<span class="cell-sub">未更新</span>' : ""}</td>`;
       }
 
       function formatValue(value, column, row) {

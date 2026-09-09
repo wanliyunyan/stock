@@ -49,6 +49,7 @@ async function proxySearch(request) {
 
         const upstream = await fetch(EASTMONEY_SEARCH_API, {
             method: "POST",
+            cache: "no-store",
             headers: {
                 Accept: "application/json, text/plain, */*",
                 "Content-Type": "application/json;charset=UTF-8",
@@ -88,8 +89,10 @@ async function fetchFirstAvailableQuoteApi(searchParams) {
             for (const [key, value] of searchParams.entries()) {
                 upstreamUrl.searchParams.set(key, value);
             }
+            upstreamUrl.searchParams.set("_", `${Date.now()}-${crypto.randomUUID()}`);
 
             const upstream = await fetch(upstreamUrl.toString(), {
+                cache: "no-store",
                 headers: {
                     Accept: "application/json, text/plain, */*",
                     Origin: "https://quote.eastmoney.com",
@@ -111,7 +114,10 @@ async function relay(upstream) {
     const contentType = upstream.headers.get("content-type") || "application/json; charset=utf-8";
     return new Response(body, {
         status: upstream.status,
-        headers: corsHeaders({ "Content-Type": contentType })
+        headers: corsHeaders({
+            "Content-Type": contentType,
+            ...(upstream.headers.has("Retry-After") ? { "Retry-After": upstream.headers.get("Retry-After") } : {})
+        })
     });
 }
 
@@ -140,6 +146,7 @@ function corsHeaders(extra = {}) {
         "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
         "Access-Control-Allow-Headers": "Accept, Content-Type, Origin, Referer, X-Requested-With",
         "Access-Control-Max-Age": "86400",
+        "Access-Control-Expose-Headers": "Retry-After",
         "Cache-Control": "no-store",
         ...extra
     };
