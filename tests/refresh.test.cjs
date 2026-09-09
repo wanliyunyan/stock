@@ -13,35 +13,48 @@ const payload = (code = "600001") => ({ data: { result: {
 } } });
 const limited = () => response({ code: "307", msg: "查询过快，请稍后重试" });
 
-function loadPage(fetch, storage = new Map()) {
+function eventTarget(properties = {}) {
+  const listeners = new Map();
+  return {
+    ...properties,
+    addEventListener(type, listener) {
+      if (!listeners.has(type)) listeners.set(type, []);
+      listeners.get(type).push(listener);
+    },
+    dispatch(type) { for (const listener of listeners.get(type) || []) listener({ type }); }
+  };
+}
+
+function loadPage(fetch, storage = new Map(), { startup = false } = {}) {
   const html = fs.readFileSync(path.join(__dirname, "../index.html"), "utf8");
   const elements = new Map();
-  for (const [, id] of html.matchAll(/\bid="([^"]+)"/g)) elements.set(id, {
-    value: "", style: { setProperty() {} }, setAttribute() {}, addEventListener() {},
+  for (const [, id] of html.matchAll(/\bid="([^"]+)"/g)) elements.set(id, eventTarget({
+    value: "", style: { setProperty() {} }, setAttribute() {},
     querySelectorAll: () => [], querySelector: () => null
-  });
+  }));
   let now = Date.parse("2026-09-09T06:00:00Z");
   let timerId = 0;
   const timers = new Map();
-  const document = { hidden: false, getElementById: id => elements.get(id), querySelectorAll: () => [] };
+  const document = eventTarget({ hidden: false, getElementById: id => elements.get(id), querySelectorAll: () => [] });
   const context = vm.createContext({
     Date: class extends Date { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } },
     document, location: { protocol: "http:", hostname: "localhost", search: "" },
-    window: {
+    window: eventTarget({
       localStorage: { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value) },
       setTimeout(fn, delay) { timers.set(++timerId, { fn, at: now + delay }); return timerId; },
+      setInterval() { throw new Error("Periodic refresh must not be registered"); },
       clearTimeout: id => timers.delete(id)
-    },
+    }),
     URLSearchParams, AbortController, fetch, console: { warn() {} }
   });
   const script = html.match(/<script>([\s\S]*?)<\/script>/)[1].replace(
     '      applyData(emptySource, { type: "loading", error: "" });',
     `      globalThis.page = {
-      requestEastmoney, fetchLiveSource, refreshLiveData, refreshLiveQuotes, scheduleLiveUpdate,
+      requestEastmoney, requestEastmoneyKlines, fetchLiveSource, refreshLiveData, requestLiveUpdate,
       buildLiveQuery, buildSupplementalMetricQueries, applyData, normalizeEastmoneyResponse,
-      restoreSavedSource, writeStoredData, fundamentalsRefreshMs,
+      restoreSavedSource, writeStoredData, searchCacheTtlMs,
       get source() { return activeSource; }, get status() { return dataStatus; }
-    }; return;`
+    }; ${startup ? 'applyData(emptySource, { type: "loading", error: "" });' : 'return;'}`
   );
   vm.runInContext(script, context);
   const flush = async () => { for (let i = 0; i < 50; i++) await Promise.resolve(); };
@@ -107,16 +120,19 @@ test("a supplemental rate limit stops the remaining metrics and keeps the base r
   assert.equal(source.rows[0].cashConversionDetails.status, "加载失败");
 });
 
-test("failed refresh retains loaded rows and labels the old query and scheduled retry", async () => {
-  const app = loadPage(async () => limited());
+test("failed refresh retains loaded rows and requires a manual retry after cooldown", async () => {
+  let calls = 0;
+  const app = loadPage(async () => { calls++; return limited(); });
   const previous = app.page.normalizeEastmoneyResponse(payload(), "previous filters");
   app.page.applyData(previous, { type: "live", error: "" });
   await app.page.refreshLiveData();
   assert.equal(app.page.source.rows[0].SECURITY_CODE, "600001");
   assert.equal(app.page.status.type, "error");
   assert.match(app.elements.get("dataNotice").textContent, /上次查询结果/);
-  assert.match(app.elements.get("dataNotice").textContent, /自动重试/);
-  assert.ok([...app.timers.values()].every(timer => timer.at >= app.now() + 300000));
+  assert.match(app.elements.get("dataNotice").textContent, /手动刷新页面重试/);
+  assert.equal(app.timers.size, 0);
+  await app.advance(3600000);
+  assert.equal(calls, 1);
 });
 
 test("filter edits invalidate in-flight results immediately and skip their remaining requests", async () => {
@@ -125,31 +141,59 @@ test("filter edits invalidate in-flight results immediately and skip their remai
   const app = loadPage(() => { calls++; return new Promise(resolve => { resolveFetch = resolve; }); });
   const pending = app.page.refreshLiveData();
   await app.flush();
-  await app.page.refreshLiveData();
-  assert.equal(calls, 1);
   app.elements.get("yoyThresholdInput").value = "200";
-  app.page.scheduleLiveUpdate(550, true);
+  app.page.requestLiveUpdate();
   resolveFetch(response(payload("600002")));
   await pending;
   assert.equal(calls, 1);
   assert.equal(app.page.source.rows.length, 0);
+  await app.advance(2000);
+  assert.equal(calls, 2);
+  resolveFetch(limited());
+  await app.flush();
+  assert.equal(app.timers.size, 0);
 });
 
-test("quotes refresh independently and hidden pages do not request anything", async () => {
+test("startup loads stocks and quotes once; idle time and returning to the tab never reload", async () => {
   const urls = [];
-  const app = loadPage(async url => { urls.push(url); return response({ data: { diff: [] } }); });
-  app.page.applyData(app.page.normalizeEastmoneyResponse(payload(), app.page.buildLiveQuery()), { type: "live", error: "" });
-  await app.page.refreshLiveQuotes();
-  assert.equal(urls.length, 1);
-  assert.ok(urls[0].includes("/api/quotes"));
-  await app.advance(60000);
-  await app.page.refreshLiveQuotes();
-  assert.equal(urls.length, 2);
+  const app = loadPage(async url => {
+    urls.push(url);
+    return response(url.includes("/api/quotes") ? { data: { diff: [] } } : payload());
+  }, new Map(), { startup: true });
+  await app.flush();
+  for (let i = 0; i < 3; i++) await app.advance(2000);
+  assert.equal(urls.filter(url => url.includes("/api/stocks")).length, 4);
+  assert.equal(urls.filter(url => url.includes("/api/quotes")).length, 1);
+  assert.equal(app.page.source.rows.length, 1);
+  assert.equal(app.timers.size, 0);
+  await app.advance(3600000);
   app.document.hidden = true;
-  await app.advance(60000);
-  await app.page.refreshLiveData();
-  await app.page.refreshLiveQuotes();
-  assert.equal(urls.length, 2);
+  app.document.dispatch("visibilitychange");
+  app.document.hidden = false;
+  app.document.dispatch("visibilitychange");
+  await app.flush();
+  assert.equal(urls.length, 5);
+  app.elements.get("roeMinInput").value = "10";
+  app.elements.get("roeMinInput").dispatch("input");
+  const input = app.elements.get("yoyThresholdInput");
+  input.value = "200";
+  input.dispatch("input");
+  await app.advance(1000);
+  assert.equal(urls.length, 5);
+  input.dispatch("change");
+  await app.flush();
+  for (let i = 0; i < 3; i++) await app.advance(2000);
+  assert.equal(urls.length, 10);
+  assert.equal(app.timers.size, 0);
+});
+
+test("K-line failures do not schedule an automatic retry", async () => {
+  let calls = 0;
+  const app = loadPage(async () => { calls++; throw new Error("offline"); });
+  await assert.rejects(app.page.requestEastmoneyKlines({ code: "600001", market: "1" }, "101"), /offline/);
+  assert.equal(app.timers.size, 0);
+  await app.advance(3600000);
+  assert.equal(calls, 1);
 });
 
 test("snapshot restore requires the same filters and expires after 24 hours", () => {

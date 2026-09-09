@@ -1202,8 +1202,8 @@
       const klineFields1 = "f1,f2,f3,f4,f5,f6";
       const klineFields2 = "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61";
       const quoteBatchSize = 80;
-      const liveRefreshMs = 60 * 1000;
-      const fundamentalsRefreshMs = 5 * 60 * 1000;
+      const searchCacheTtlMs = 5 * 60 * 1000;
+      const rateLimitBaseMs = 5 * 60 * 1000;
       const searchGapMs = 2000;
       const maxSnapshotAgeMs = 24 * 60 * 60 * 1000;
       const chartHoverDelayMs = 180;
@@ -1283,13 +1283,9 @@
       let displayGroups = [];
       let leafColumns = [];
       let filterKeys = {};
-      let liveTimer = 0;
       let liveRequestId = 0;
       let liveInFlight = false;
       let livePending = false;
-      let nextLiveRefreshAt = 0;
-      let quoteInFlight = false;
-      let lastQuoteRefreshAt = 0;
       let searchQueue = Promise.resolve();
       let searchGate = {};
       const searchCache = new Map();
@@ -1313,15 +1309,7 @@
       applyData(emptySource, { type: "loading", error: "" });
       if (apiBaseUrl || isLocalDev) {
         restoreSavedSource();
-        scheduleLiveUpdate(Math.max(0, nextLiveRefreshAt - Date.now()));
-        window.setInterval(refreshLiveQuotes, liveRefreshMs);
-        document.addEventListener("visibilitychange", () => {
-          if (document.hidden) window.clearTimeout(liveTimer);
-          else {
-            scheduleLiveUpdate(Math.max(0, nextLiveRefreshAt - Date.now()));
-            refreshLiveQuotes();
-          }
-        });
+        refreshLiveData();
       } else {
         applyData(emptySource, { type: "error", error: "请先配置 Worker 地址，例如 ?api=https://xxx.workers.dev" });
       }
@@ -1334,7 +1322,9 @@
       });
       liveNumericFilters.forEach(filter => {
         [filter.minInput, filter.maxInput].forEach(input => {
-          if (input) input.addEventListener("input", () => scheduleLiveUpdate(550, true));
+          if (!input) return;
+          input.addEventListener("input", () => { ++liveRequestId; livePending = false; });
+          input.addEventListener("change", requestLiveUpdate);
         });
       });
       resetButton.addEventListener("click", () => {
@@ -1548,27 +1538,16 @@
           end: "20500101",
           lmt: String(chartPeriods[selectedPeriod].limit)
         });
-        let responseText = "";
-        for (let attempt = 0; attempt < 3; attempt += 1) {
-          try {
-            const response = await fetch(`${eastmoneyKlineApi}?${params.toString()}`, {
-              signal,
-              cache: "no-store",
-              headers: {
-                "Accept": "application/json, text/plain, */*"
-              }
-            });
-            responseText = await response.text();
-            if (!response.ok) {
-              throw new Error(responseText || `HTTP ${response.status}`);
-            }
-            break;
-          } catch (error) {
-            if ((error && error.name === "AbortError") || attempt === 2) {
-              throw error;
-            }
-            await new Promise(resolve => window.setTimeout(resolve, 180 * (attempt + 1)));
+        const response = await fetch(`${eastmoneyKlineApi}?${params.toString()}`, {
+          signal,
+          cache: "no-store",
+          headers: {
+            "Accept": "application/json, text/plain, */*"
           }
+        });
+        const responseText = await response.text();
+        if (!response.ok) {
+          throw new Error(responseText || `HTTP ${response.status}`);
         }
         const apiData = parseJsonResponse(responseText, "K线接口返回格式异常");
         if (apiData && apiData["rc"] !== 0) {
@@ -2071,30 +2050,19 @@
         });
       }
 
-      function scheduleLiveUpdate(delay = 550, showLoading = false) {
-        window.clearTimeout(liveTimer);
-        if (showLoading) {
-          ++liveRequestId;
-          setLiveLoadingStatus();
-        }
-        if (document.hidden) return;
-        const retryAt = readSearchGate().retryAt || 0;
-        if (retryAt > Date.now()) showRefreshFailure(rateLimitError(retryAt));
-        liveTimer = window.setTimeout(refreshLiveData, Math.max(delay, retryAt - Date.now()));
-      }
-
-      function setLiveLoadingStatus() {
+      function requestLiveUpdate() {
+        ++liveRequestId;
         dataStatus = { type: "loading", error: "" };
         render();
+        return refreshLiveData();
       }
 
       async function refreshLiveData() {
-        if (document.hidden) return;
         if (liveInFlight) { livePending = true; return; }
         const requestId = liveRequestId;
         const query = buildLiveQuery();
         const supplementalQueries = buildSupplementalMetricQueries();
-        const isCurrent = () => requestId === liveRequestId && !document.hidden;
+        const isCurrent = () => requestId === liveRequestId;
         liveInFlight = true;
         livePending = false;
         try {
@@ -2108,37 +2076,27 @@
             showRefreshFailure(liveSource.refreshError);
           } else {
             applyData(liveSource, { type: "live", error: "" });
-            nextLiveRefreshAt = Date.now() + fundamentalsRefreshMs;
-            writeStoredData("snapshot", { savedAt: Date.now(), source: liveSource });
+            const savedAt = Date.now();
+            writeStoredData("snapshot", { savedAt, source: liveSource });
+            enrichRealtimeQuoteData(liveSource).then(sourceWithQuotes => {
+              if (!isCurrent() || activeSource !== liveSource) return;
+              applyData(sourceWithQuotes, dataStatus);
+              writeStoredData("snapshot", { savedAt, source: sourceWithQuotes });
+            }).catch(error => console.warn("Realtime quote update failed:", error));
           }
         } catch (error) {
           if (requestId !== liveRequestId) return;
           showRefreshFailure(error);
         } finally {
           liveInFlight = false;
-          const pending = livePending || requestId !== liveRequestId;
-          scheduleLiveUpdate(pending ? 550 : Math.max(0, nextLiveRefreshAt - Date.now()));
-          refreshLiveQuotes();
+          // Only continue when the user committed another query during this request.
+          if (livePending) refreshLiveData();
         }
       }
 
       function showRefreshFailure(error) {
-        nextLiveRefreshAt = error.retryAt > Date.now() ? error.retryAt : Date.now() + liveRefreshMs;
-        dataStatus = { type: "error", error: cleanError(error), retryAt: nextLiveRefreshAt };
+        dataStatus = { type: "error", error: cleanError(error), retryAt: error.retryAt || 0 };
         render();
-      }
-
-      async function refreshLiveQuotes() {
-        if (document.hidden || liveInFlight || quoteInFlight || !rows.length || Date.now() - lastQuoteRefreshAt < liveRefreshMs) return;
-        const source = activeSource;
-        quoteInFlight = true;
-        lastQuoteRefreshAt = Date.now();
-        try {
-          const updated = await enrichRealtimeQuoteData(source);
-          if (activeSource === source) applyData(updated, dataStatus);
-        } finally {
-          quoteInFlight = false;
-        }
       }
 
       function readStoredData(name) {
@@ -2157,7 +2115,6 @@
             !Array.isArray(snapshot.source.rows) || !Array.isArray(snapshot.source.columns) ||
             !Number.isFinite(snapshot.savedAt) || snapshot.savedAt > Date.now() || Date.now() - snapshot.savedAt > maxSnapshotAgeMs) return;
         applyData(snapshot.source, { type: "cached", error: "" });
-        nextLiveRefreshAt = snapshot.savedAt + fundamentalsRefreshMs;
       }
 
       async function fetchLiveSource(query, supplementalQueries, isCurrent = () => true) {
@@ -2324,7 +2281,7 @@
         const stored = readStoredData("search-cache") || [];
         const cached = [searchCache.get(query), Array.isArray(stored) && stored.find(item => item.query === query)]
           .filter(Boolean).sort((a, b) => b.savedAt - a.savedAt)[0];
-        if (cached && Date.now() - cached.savedAt >= 0 && Date.now() - cached.savedAt < fundamentalsRefreshMs) return cached.data;
+        if (cached && Date.now() - cached.savedAt >= 0 && Date.now() - cached.savedAt < searchCacheTtlMs) return cached.data;
         let gate = readSearchGate();
         if (gate.retryAt > Date.now()) throw rateLimitError(gate.retryAt);
         const gap = (gate.lastRequestAt || 0) + searchGapMs - Date.now();
@@ -2353,7 +2310,7 @@
             const retryHeader = response.headers?.get("Retry-After");
             const retryDelay = /^\d+(?:\.\d+)?$/.test(retryHeader || "")
               ? Number(retryHeader) * 1000 : Math.max(0, Date.parse(retryHeader) - Date.now()) || 0;
-            const retryAt = Date.now() + Math.max(retryDelay, Math.min(fundamentalsRefreshMs * 2 ** (failures - 1), 30 * 60 * 1000));
+            const retryAt = Date.now() + Math.max(retryDelay, Math.min(rateLimitBaseMs * 2 ** (failures - 1), 30 * 60 * 1000));
             searchGate = { ...searchGate, retryAt, failures, updatedAt: Date.now() };
             writeStoredData("search-gate", searchGate);
             throw rateLimitError(retryAt);
@@ -2367,7 +2324,7 @@
           const entry = { query, savedAt: Date.now(), data };
           searchCache.set(query, entry);
           if (searchCache.size > 8) searchCache.delete(searchCache.keys().next().value);
-          writeStoredData("search-cache", [...(Array.isArray(stored) ? stored : []).filter(item => item.query !== query && Date.now() - item.savedAt < fundamentalsRefreshMs), entry].slice(-8));
+          writeStoredData("search-cache", [...(Array.isArray(stored) ? stored : []).filter(item => item.query !== query && Date.now() - item.savedAt < searchCacheTtlMs), entry].slice(-8));
           searchGate = { ...searchGate, retryAt: 0, failures: 0, updatedAt: Date.now() };
           writeStoredData("search-gate", searchGate);
           return data;
@@ -2543,10 +2500,11 @@
         const previousQuery = activeSource.query && activeSource.query !== buildLiveQuery();
         const messages = [];
         if (dataStatus.error) messages.push(`更新未完成：${dataStatus.error}。`);
-        if (dataStatus.type === "cached") messages.push("已显示本机上次成功加载的数据，稍后自动更新。");
+        if (dataStatus.type === "cached") messages.push("已显示本机上次成功加载的数据。");
         if (previousQuery) messages.push("当前显示上次查询结果，新筛选条件尚未加载成功。");
         else if (dataStatus.error && rows.length) messages.push("暂时保留已加载结果，财务数据可能未更新。");
-        if (dataStatus.retryAt) messages.push(`将在 ${new Date(dataStatus.retryAt).toLocaleTimeString("zh-CN", { hour12: false })} 自动重试，无需反复刷新。`);
+        if (dataStatus.retryAt) messages.push(`可在 ${new Date(dataStatus.retryAt).toLocaleTimeString("zh-CN", { hour12: false })} 后手动刷新页面重试。`);
+        else if (dataStatus.error) messages.push("可手动刷新页面重试。");
         notice.textContent = messages.join(" ");
         notice.hidden = !messages.length;
         table.querySelectorAll("[data-sort-key]").forEach(button => {
