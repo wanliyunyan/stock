@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const { webcrypto } = require("node:crypto");
 const { test } = require("node:test");
 
 const response = (body, status = 200, retryAfter = null) => ({
@@ -40,6 +41,7 @@ function loadPage(fetch, storage = new Map(), { startup = false } = {}) {
     Date: class extends Date { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } },
     document, location: { protocol: "http:", hostname: "localhost", search: "" },
     window: eventTarget({
+      crypto: webcrypto,
       localStorage: { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value) },
       setTimeout(fn, delay) { timers.set(++timerId, { fn, at: now + delay }); return timerId; },
       setInterval() { throw new Error("Periodic refresh must not be registered"); },
@@ -65,6 +67,46 @@ function loadPage(fetch, storage = new Map(), { startup = false } = {}) {
   };
   return { page: context.page, storage, elements, document, timers, advance, flush, now: () => now };
 }
+
+test("searches reuse a random fingerprint across queries and reloads; separate browsers get separate values", async () => {
+  const requests = [];
+  const fetch = async (url, options) => {
+    requests.push(JSON.parse(options.body));
+    return response(payload());
+  };
+  const app = loadPage(fetch);
+  await app.page.requestEastmoney("first query");
+  await app.advance(2000);
+  await app.page.requestEastmoney("second query");
+  const reloaded = loadPage(fetch, app.storage);
+  await reloaded.advance(4000);
+  await reloaded.page.requestEastmoney("third query");
+  const separate = loadPage(fetch);
+  await separate.page.requestEastmoney("first query");
+  const fingerprint = requests[0].fingerprint;
+  assert.match(fingerprint, /^[0-9a-f]{32}$/);
+  assert.equal(requests[1].fingerprint, fingerprint);
+  assert.equal(requests[2].fingerprint, fingerprint);
+  assert.match(requests[3].fingerprint, /^[0-9a-f]{32}$/);
+  assert.notEqual(requests[3].fingerprint, fingerprint);
+});
+
+test("unavailable storage keeps the same fingerprint after a rate limit and manual retry", async () => {
+  const fingerprints = [];
+  const storage = { get() { throw new Error("Storage disabled"); }, set() { throw new Error("Storage disabled"); } };
+  const app = loadPage(async (url, options) => {
+    fingerprints.push(JSON.parse(options.body).fingerprint);
+    return limited();
+  }, storage);
+  await assert.rejects(app.page.requestEastmoney("first query"), /查询频率受限/);
+  await assert.rejects(app.page.requestEastmoney("second query"), /查询频率受限/);
+  assert.equal(fingerprints.length, 1);
+  await app.advance(300000);
+  await assert.rejects(app.page.requestEastmoney("second query"), /查询频率受限/);
+  assert.equal(fingerprints.length, 2);
+  assert.match(fingerprints[0], /^[0-9a-f]{32}$/);
+  assert.equal(fingerprints[1], fingerprints[0]);
+});
 
 test("HTTP 200 code 307 stops new queries and persists increasing cooldown across reloads", async () => {
   let calls = 0;

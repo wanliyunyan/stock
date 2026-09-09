@@ -1288,6 +1288,7 @@
       let livePending = false;
       let searchQueue = Promise.resolve();
       let searchGate = {};
+      let clientFingerprint = "";
       const searchCache = new Map();
       let chartRequestId = 0;
       const chartCache = new Map();
@@ -2349,7 +2350,7 @@
           keywordNew: query,
           pageSize: livePageSize,
           pageNo: 1,
-          fingerprint: "local-static-page",
+          fingerprint: getClientFingerprint(),
           gids: [],
           timestamp: Date.now(),
           requestId: createRequestId(),
@@ -2460,6 +2461,24 @@
           supplementalQuery: supplementalSource.query,
           supplementalTotal: supplementalSource.total
         };
+      }
+
+      function getClientFingerprint() {
+        if (clientFingerprint) return clientFingerprint;
+        const storageKey = "stock.fingerprint.v1";
+        try {
+          const saved = window.localStorage.getItem(storageKey);
+          if (/^[0-9a-f]{32}$/.test(saved || "")) {
+            clientFingerprint = saved;
+            return clientFingerprint;
+          }
+        } catch { /* Keep a stable identifier in memory when storage is unavailable. */ }
+        clientFingerprint = typeof window.crypto?.getRandomValues === "function"
+          ? Array.from(window.crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, "0")).join("")
+          : createRequestId();
+        try { window.localStorage.setItem(storageKey, clientFingerprint); }
+        catch { /* Subsequent requests in this page still reuse the in-memory value. */ }
+        return clientFingerprint;
       }
 
       function createRequestId() {
