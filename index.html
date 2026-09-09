@@ -388,6 +388,15 @@
       background: #fff;
     }
 
+    .data-notice {
+      margin: 0;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+      background: #fff8e8;
+      color: #805a17;
+      font-size: 12px;
+    }
+
     table {
       width: max-content;
       min-width: 100%;
@@ -1094,6 +1103,7 @@
       </section>
 
       <section class="table-shell">
+        <p class="data-notice" id="dataNotice" role="status" aria-live="polite" hidden></p>
         <div class="table-wrap" id="tableWrap">
           <table id="stockTable" aria-label="股票筛选结果表"></table>
           <div class="table-loading-overlay" id="tableLoadingOverlay" hidden>
@@ -1193,6 +1203,9 @@
       const klineFields2 = "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61";
       const quoteBatchSize = 80;
       const liveRefreshMs = 60 * 1000;
+      const fundamentalsRefreshMs = 5 * 60 * 1000;
+      const searchGapMs = 2000;
+      const maxSnapshotAgeMs = 24 * 60 * 60 * 1000;
       const chartHoverDelayMs = 180;
       const chartHideDelayMs = 180;
       const defaultApiBaseUrl = "https://stock.88527712pan.workers.dev";
@@ -1204,9 +1217,8 @@
       const isLocalDev = location.protocol === "file:" || ["localhost", "127.0.0.1", "::1"].includes(location.hostname);
       const apiBaseUrl = resolveApiBaseUrl();
       const sourceMeta = {
-        sourceUrl: "https://xuangu.eastmoney.com/Result?id=xc13a0e7a2b0c1012a62&a=edit_way&j=refreshUrl",
-        originalXcId: "xc13a0e7a2b0c1012a62",
-        resultXcId: "xc13a0e7a2b0c1012a62"
+        sourceUrl: "https://xuangu.eastmoney.com/",
+        resultXcId: ""
       };
       const emptySource = {
         ...sourceMeta,
@@ -1273,6 +1285,14 @@
       let filterKeys = {};
       let liveTimer = 0;
       let liveRequestId = 0;
+      let liveInFlight = false;
+      let livePending = false;
+      let nextLiveRefreshAt = 0;
+      let quoteInFlight = false;
+      let lastQuoteRefreshAt = 0;
+      let searchQueue = Promise.resolve();
+      let searchGate = {};
+      const searchCache = new Map();
       let chartRequestId = 0;
       const chartCache = new Map();
       const chartState = {
@@ -1292,8 +1312,16 @@
 
       applyData(emptySource, { type: "loading", error: "" });
       if (apiBaseUrl || isLocalDev) {
-        scheduleLiveUpdate(0);
-        window.setInterval(() => scheduleLiveUpdate(0), liveRefreshMs);
+        restoreSavedSource();
+        scheduleLiveUpdate(Math.max(0, nextLiveRefreshAt - Date.now()));
+        window.setInterval(refreshLiveQuotes, liveRefreshMs);
+        document.addEventListener("visibilitychange", () => {
+          if (document.hidden) window.clearTimeout(liveTimer);
+          else {
+            scheduleLiveUpdate(Math.max(0, nextLiveRefreshAt - Date.now()));
+            refreshLiveQuotes();
+          }
+        });
       } else {
         applyData(emptySource, { type: "error", error: "请先配置 Worker 地址，例如 ?api=https://xxx.workers.dev" });
       }
@@ -1620,7 +1648,7 @@
         const remoteTotal = activeSource.total || rows.length;
         document.getElementById("remoteCount").textContent = String(remoteTotal);
         document.getElementById("quoteTime").textContent = activeSource.quoteTime || activeSource.searchCodeTime || "-";
-        document.getElementById("sourceId").textContent = activeSource.originalXcId || activeSource.resultXcId || sourceMeta.originalXcId || "-";
+        document.getElementById("sourceId").textContent = activeSource.resultXcId || "-";
         document.getElementById("sourceLink").href = activeSource.sourceUrl || sourceMeta.sourceUrl || "#";
       }
 
@@ -2045,8 +2073,14 @@
 
       function scheduleLiveUpdate(delay = 550, showLoading = false) {
         window.clearTimeout(liveTimer);
-        if (showLoading) setLiveLoadingStatus();
-        liveTimer = window.setTimeout(refreshLiveData, delay);
+        if (showLoading) {
+          ++liveRequestId;
+          setLiveLoadingStatus();
+        }
+        if (document.hidden) return;
+        const retryAt = readSearchGate().retryAt || 0;
+        if (retryAt > Date.now()) showRefreshFailure(rateLimitError(retryAt));
+        liveTimer = window.setTimeout(refreshLiveData, Math.max(delay, retryAt - Date.now()));
       }
 
       function setLiveLoadingStatus() {
@@ -2055,28 +2089,86 @@
       }
 
       async function refreshLiveData() {
-        const requestId = ++liveRequestId;
+        if (document.hidden) return;
+        if (liveInFlight) { livePending = true; return; }
+        const requestId = liveRequestId;
         const query = buildLiveQuery();
         const supplementalQueries = buildSupplementalMetricQueries();
+        const isCurrent = () => requestId === liveRequestId && !document.hidden;
+        liveInFlight = true;
+        livePending = false;
         try {
-          const liveSource = await fetchLiveSource(query, supplementalQueries);
-          if (requestId !== liveRequestId) return;
-          applyData(liveSource, { type: "live", error: "" });
+          const liveSource = await fetchLiveSource(query, supplementalQueries, isCurrent);
+          if (!isCurrent()) return;
+          if (liveSource.refreshError) {
+            // Keep a complete previous result when only part of the new result arrived.
+            if (activeSource.query !== query || !activeSource.rows.length) {
+              applyData(liveSource, { type: "live", error: "" });
+            }
+            showRefreshFailure(liveSource.refreshError);
+          } else {
+            applyData(liveSource, { type: "live", error: "" });
+            nextLiveRefreshAt = Date.now() + fundamentalsRefreshMs;
+            writeStoredData("snapshot", { savedAt: Date.now(), source: liveSource });
+          }
         } catch (error) {
           if (requestId !== liveRequestId) return;
-          applyData(emptySource, { type: "error", error: cleanError(error) });
+          showRefreshFailure(error);
+        } finally {
+          liveInFlight = false;
+          const pending = livePending || requestId !== liveRequestId;
+          scheduleLiveUpdate(pending ? 550 : Math.max(0, nextLiveRefreshAt - Date.now()));
+          refreshLiveQuotes();
         }
       }
 
-      async function fetchLiveSource(query, supplementalQueries) {
+      function showRefreshFailure(error) {
+        nextLiveRefreshAt = error.retryAt > Date.now() ? error.retryAt : Date.now() + liveRefreshMs;
+        dataStatus = { type: "error", error: cleanError(error), retryAt: nextLiveRefreshAt };
+        render();
+      }
+
+      async function refreshLiveQuotes() {
+        if (document.hidden || liveInFlight || quoteInFlight || !rows.length || Date.now() - lastQuoteRefreshAt < liveRefreshMs) return;
+        const source = activeSource;
+        quoteInFlight = true;
+        lastQuoteRefreshAt = Date.now();
+        try {
+          const updated = await enrichRealtimeQuoteData(source);
+          if (activeSource === source) applyData(updated, dataStatus);
+        } finally {
+          quoteInFlight = false;
+        }
+      }
+
+      function readStoredData(name) {
+        try { return JSON.parse(window.localStorage.getItem(`stock.v2.${apiBaseUrl}.${name}`)); }
+        catch { return null; }
+      }
+
+      function writeStoredData(name, value) {
+        try { window.localStorage.setItem(`stock.v2.${apiBaseUrl}.${name}`, JSON.stringify(value)); }
+        catch { /* Storage may be disabled or full; in-memory safeguards still apply. */ }
+      }
+
+      function restoreSavedSource() {
+        const snapshot = readStoredData("snapshot");
+        if (!snapshot || snapshot.source?.query !== buildLiveQuery() ||
+            !Array.isArray(snapshot.source.rows) || !Array.isArray(snapshot.source.columns) ||
+            !Number.isFinite(snapshot.savedAt) || snapshot.savedAt > Date.now() || Date.now() - snapshot.savedAt > maxSnapshotAgeMs) return;
+        applyData(snapshot.source, { type: "cached", error: "" });
+        nextLiveRefreshAt = snapshot.savedAt + fundamentalsRefreshMs;
+      }
+
+      async function fetchLiveSource(query, supplementalQueries, isCurrent = () => true) {
         const apiData = await requestEastmoney(query);
         const source = normalizeEastmoneyResponse(apiData, query);
         const years = cashConversionYears();
-        const [mergedSource, cashConversionData] = await Promise.all([
-          fetchSupplementalMetricSource(source, supplementalQueries),
-          fetchCashConversionData(source, years)
-        ]);
-        return enrichRealtimeQuoteData(addCashConversionMetric(mergedSource, cashConversionData, years));
+        if (!isCurrent() || !source.rows.length) return addCashConversionMetric(source, { rows: [], failed: false }, years);
+        const mergedSource = await fetchSupplementalMetricSource(source, supplementalQueries, isCurrent);
+        if (!isCurrent() || mergedSource.refreshError) return addCashConversionMetric(mergedSource, { rows: [], failed: true }, years);
+        const cashConversionData = await fetchCashConversionData(source, years);
+        return { ...addCashConversionMetric(mergedSource, cashConversionData, years), refreshError: cashConversionData.error || null };
       }
 
       function cashConversionYears(now = new Date()) {
@@ -2102,7 +2194,7 @@
           return { rows: result.rows, failed: false };
         } catch (error) {
           console.warn("Cash conversion metrics failed", error);
-          return { rows: [], failed: true };
+          return { rows: [], failed: true, error };
         }
       }
 
@@ -2191,35 +2283,97 @@
         };
       }
 
-      async function fetchSupplementalMetricSource(source, supplementalQueries) {
+      async function fetchSupplementalMetricSource(source, supplementalQueries, isCurrent = () => true) {
         const queries = Array.isArray(supplementalQueries) ? supplementalQueries : [supplementalQueries];
         let mergedSource = source;
         for (const supplementalQuery of queries) {
+          if (!isCurrent()) break;
           if (!supplementalQuery || supplementalQuery === source.query) continue;
           try {
             const apiData = await requestEastmoney(supplementalQuery);
             mergedSource = mergeSupplementalSource(mergedSource, normalizeEastmoneyResponse(apiData, supplementalQuery));
           } catch (error) {
             console.warn("Supplemental Eastmoney metrics failed", error);
+            return { ...mergedSource, refreshError: error };
           }
         }
         return mergedSource;
       }
 
-      async function requestEastmoney(query) {
-        const response = await fetch(stockApiUrl("/api/stocks", eastmoneySearchApi), {
-          method: "POST",
-          headers: {
-            "Accept": "application/json, text/plain, */*",
-            "Content-Type": "application/json;charset=UTF-8"
-          },
-          body: JSON.stringify(buildEastmoneyRequest(query))
-        });
-        const responseText = await response.text();
-        if (!response.ok) {
-          throw new Error(responseText || `HTTP ${response.status}`);
+      function requestEastmoney(query) {
+        // Serialize across this page and, where supported, other tabs on the same origin.
+        const run = () => typeof navigator !== "undefined" && navigator.locks
+          ? navigator.locks.request(`stock-search:${apiBaseUrl}`, () => requestEastmoneyOnce(query))
+          : requestEastmoneyOnce(query);
+        const pending = searchQueue.then(run, run);
+        searchQueue = pending.catch(() => {});
+        return pending;
+      }
+
+      function readSearchGate() {
+        const saved = readStoredData("search-gate") || {};
+        if ((saved.updatedAt || 0) >= (searchGate.updatedAt || 0)) searchGate = saved;
+        return searchGate;
+      }
+
+      function rateLimitError(retryAt) {
+        return Object.assign(new Error("东方财富查询频率受限"), { retryAt });
+      }
+
+      async function requestEastmoneyOnce(query) {
+        const stored = readStoredData("search-cache") || [];
+        const cached = [searchCache.get(query), Array.isArray(stored) && stored.find(item => item.query === query)]
+          .filter(Boolean).sort((a, b) => b.savedAt - a.savedAt)[0];
+        if (cached && Date.now() - cached.savedAt >= 0 && Date.now() - cached.savedAt < fundamentalsRefreshMs) return cached.data;
+        let gate = readSearchGate();
+        if (gate.retryAt > Date.now()) throw rateLimitError(gate.retryAt);
+        const gap = (gate.lastRequestAt || 0) + searchGapMs - Date.now();
+        if (gap > 0) await new Promise(resolve => window.setTimeout(resolve, gap));
+        gate = readSearchGate();
+        if (gate.retryAt > Date.now()) throw rateLimitError(gate.retryAt);
+        searchGate = { ...gate, lastRequestAt: Date.now(), updatedAt: Date.now() };
+        writeStoredData("search-gate", searchGate);
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 30000);
+        try {
+          const response = await fetch(stockApiUrl("/api/stocks", eastmoneySearchApi), {
+            method: "POST",
+            headers: {
+              "Accept": "application/json, text/plain, */*",
+              "Content-Type": "application/json;charset=UTF-8"
+            },
+            body: JSON.stringify(buildEastmoneyRequest(query)),
+            signal: controller.signal
+          });
+          const responseText = await response.text();
+          let data;
+          try { data = JSON.parse(responseText); } catch { /* Report non-JSON errors below. */ }
+          if (response.status === 429 || String(data?.code) === "307") {
+            const failures = (gate.failures || 0) + 1;
+            const retryHeader = response.headers?.get("Retry-After");
+            const retryDelay = /^\d+(?:\.\d+)?$/.test(retryHeader || "")
+              ? Number(retryHeader) * 1000 : Math.max(0, Date.parse(retryHeader) - Date.now()) || 0;
+            const retryAt = Date.now() + Math.max(retryDelay, Math.min(fundamentalsRefreshMs * 2 ** (failures - 1), 30 * 60 * 1000));
+            searchGate = { ...searchGate, retryAt, failures, updatedAt: Date.now() };
+            writeStoredData("search-gate", searchGate);
+            throw rateLimitError(retryAt);
+          }
+          if (!response.ok) {
+            throw new Error(responseText || `HTTP ${response.status}`);
+          }
+          data = data || parseJsonResponse(responseText, "选股接口返回格式异常");
+          // Only valid table responses may enter the cache.
+          normalizeEastmoneyResponse(data, query);
+          const entry = { query, savedAt: Date.now(), data };
+          searchCache.set(query, entry);
+          if (searchCache.size > 8) searchCache.delete(searchCache.keys().next().value);
+          writeStoredData("search-cache", [...(Array.isArray(stored) ? stored : []).filter(item => item.query !== query && Date.now() - item.savedAt < fundamentalsRefreshMs), entry].slice(-8));
+          searchGate = { ...searchGate, retryAt: 0, failures: 0, updatedAt: Date.now() };
+          writeStoredData("search-gate", searchGate);
+          return data;
+        } finally {
+          window.clearTimeout(timeout);
         }
-        return parseJsonResponse(responseText, "选股接口返回格式异常");
       }
 
       function parseJsonResponse(text, fallbackMessage) {
@@ -2305,10 +2459,9 @@
         if (!result || !Array.isArray(apiRows) || !Array.isArray(result["columns"])) {
           throw new Error((apiData && apiData["msg"]) || "接口未返回表格数据");
         }
-        const resultXcId = payload["xcId"] || sourceMeta.resultXcId;
+        const resultXcId = typeof payload["xcId"] === "string" ? payload["xcId"].trim() : "";
         return {
-          sourceUrl: resultXcId ? `https://xuangu.eastmoney.com/Result?id=${resultXcId}&a=edit_way&j=refreshUrl` : sourceMeta.sourceUrl,
-          originalXcId: sourceMeta.originalXcId,
+          sourceUrl: resultXcId ? `https://xuangu.eastmoney.com/Result?id=${encodeURIComponent(resultXcId)}&a=edit_way&j=refreshUrl` : sourceMeta.sourceUrl,
           resultXcId,
           query,
           quoteTime: payload["quoteTime"] || result["quoteTime"] || "",
@@ -2386,6 +2539,16 @@
         table.innerHTML = `${renderHeader()}${renderBody(filtered)}`;
         updateStickyOffsets();
         setTableLoadingOverlay(dataStatus.type === "loading" && rows.length > 0);
+        const notice = document.getElementById("dataNotice");
+        const previousQuery = activeSource.query && activeSource.query !== buildLiveQuery();
+        const messages = [];
+        if (dataStatus.error) messages.push(`更新未完成：${dataStatus.error}。`);
+        if (dataStatus.type === "cached") messages.push("已显示本机上次成功加载的数据，稍后自动更新。");
+        if (previousQuery) messages.push("当前显示上次查询结果，新筛选条件尚未加载成功。");
+        else if (dataStatus.error && rows.length) messages.push("暂时保留已加载结果，财务数据可能未更新。");
+        if (dataStatus.retryAt) messages.push(`将在 ${new Date(dataStatus.retryAt).toLocaleTimeString("zh-CN", { hour12: false })} 自动重试，无需反复刷新。`);
+        notice.textContent = messages.join(" ");
+        notice.hidden = !messages.length;
         table.querySelectorAll("[data-sort-key]").forEach(button => {
           button.addEventListener("click", () => sortBy(button.dataset.sortKey));
         });

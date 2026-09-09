@@ -11,8 +11,8 @@ function loadPage(fetch = async () => { throw new Error("offline"); }) {
   const context = vm.createContext({
     document: { getElementById: id => elements.get(id), querySelectorAll: () => [] },
     location: { protocol: "http:", hostname: "localhost", search: "" },
-    window: { localStorage: { getItem: () => null } },
-    URLSearchParams, fetch, console: { warn() {} }
+    window: { localStorage: { getItem: () => null }, setTimeout, clearTimeout },
+    URLSearchParams, AbortController, fetch, console: { warn() {} }
   });
   // Expose page functions before startup; no DOM or network side effects in unit tests.
   const script = html.match(/<script>([\s\S]*?)<\/script>/)[1].replace(
