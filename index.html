@@ -1046,6 +1046,13 @@
                 <input class="range-input" id="netMarginMaxInput" type="number" step="0.01" inputmode="decimal" placeholder="最大" aria-label="净利率最大值">
               </span>
             </label>
+            <label class="range-filter" title="最近三个完整年度经营现金流净额合计 ÷ 同期合并净利润合计；按倍数筛选，例如最小值填1表示至少1倍。数据不全或累计净利润≤0时不计算。">
+              <span class="range-label">近三年累计净现比（倍）</span>
+              <span class="range-inputs">
+                <input class="range-input" id="cashConversionMinInput" type="number" step="0.01" inputmode="decimal" placeholder="最小倍" aria-label="近三年累计净现比最小值，单位倍">
+                <input class="range-input" id="cashConversionMaxInput" type="number" step="0.01" inputmode="decimal" placeholder="最大倍" aria-label="近三年累计净现比最大值，单位倍">
+              </span>
+            </label>
             <label class="range-filter">
               <span class="range-label">市盈率(动)</span>
               <span class="range-inputs">
@@ -1161,10 +1168,12 @@
       const chartPeriodButtons = Array.from(document.querySelectorAll("[data-chart-period]"));
       const qoqThresholdInput = document.getElementById("qoqThresholdInput");
       const yoyThresholdInput = document.getElementById("yoyThresholdInput");
+      const cashConversionKey = "CASH_CONVERSION_3Y";
       const numericFilters = [
         { id: "roe", keyPrefix: "ROE_WEIGHT", scale: 1, minInput: document.getElementById("roeMinInput"), maxInput: document.getElementById("roeMaxInput") },
         { id: "grossMargin", keyPrefix: "XSMLL", scale: 1, minInput: document.getElementById("grossMarginMinInput"), maxInput: document.getElementById("grossMarginMaxInput") },
         { id: "netMargin", keyPrefix: "XSJLL", scale: 1, minInput: document.getElementById("netMarginMinInput"), maxInput: document.getElementById("netMarginMaxInput") },
+        { id: "cashConversion", key: cashConversionKey, scale: 1, minInput: document.getElementById("cashConversionMinInput"), maxInput: document.getElementById("cashConversionMaxInput") },
         { id: "pe", key: "PE_DYNAMIC", scale: 1, minInput: document.getElementById("peMinInput"), maxInput: document.getElementById("peMaxInput") },
         { id: "pb", key: "PB", scale: 1, minInput: document.getElementById("pbMinInput"), maxInput: document.getElementById("pbMaxInput") },
         { id: "dividendYield", keyPrefix: "DIVIDEND_NEWRATIO_HYY", scale: 1, minInput: document.getElementById("dividendYieldMinInput"), maxInput: document.getElementById("dividendYieldMaxInput") },
@@ -1627,7 +1636,29 @@
           }
           return result;
         }, []);
-        return orderDisplayGroups(groupIntervalChangeColumns(groupGrowthRateColumns(groupDividendMetricColumns(groupReportMetricColumns(groupValuationPercentileColumns(groupRealtimeQuoteColumns(groupContractLiabilityColumns(groups))))))));
+        return orderDisplayGroups(groupOperatingCashFlowColumns(groupIntervalChangeColumns(groupGrowthRateColumns(groupDividendMetricColumns(groupReportMetricColumns(groupValuationPercentileColumns(groupRealtimeQuoteColumns(groupContractLiabilityColumns(groups)))))))));
+      }
+
+      function isAnnualOperatingCashFlowColumn(key) {
+        return /^NETOPERATECASHFLOW\{\d{4}-12-31\}$/.test(String(key || ""));
+      }
+
+      function groupOperatingCashFlowColumns(groups) {
+        const children = [];
+        const otherGroups = groups.filter(group => {
+          if (group.column && (group.column.key === cashConversionKey || isAnnualOperatingCashFlowColumn(group.column.key))) {
+            children.push(group.column);
+            return false;
+          }
+          return true;
+        });
+        if (!children.length) return groups;
+        children.sort((a, b) => {
+          if (a.key === cashConversionKey) return 1;
+          if (b.key === cashConversionKey) return -1;
+          return a.key.localeCompare(b.key);
+        });
+        return [...otherGroups, { title: "经营活动现金流", children, childLabelMode: "title" }];
       }
 
       function keepDisplayColumn(column, seenColumnKeys) {
@@ -1947,6 +1978,7 @@
         if (String(key || "").startsWith("ROE_WEIGHT")) return 11;
         if (String(key || "").startsWith("XSMLL")) return 12;
         if (String(key || "").startsWith("XSJLL")) return 13;
+        if (key === cashConversionKey || isAnnualOperatingCashFlowColumn(key)) return 13.5;
         if (String(key || "").includes("同比增长率")) return 14;
         if (String(key || "").includes("环比增长率")) return 15;
         if (isIntervalChangeColumn(key)) return 1100;
@@ -2039,8 +2071,124 @@
       async function fetchLiveSource(query, supplementalQueries) {
         const apiData = await requestEastmoney(query);
         const source = normalizeEastmoneyResponse(apiData, query);
-        const mergedSource = await fetchSupplementalMetricSource(source, supplementalQueries);
-        return enrichRealtimeQuoteData(mergedSource);
+        const years = cashConversionYears();
+        const [mergedSource, cashConversionData] = await Promise.all([
+          fetchSupplementalMetricSource(source, supplementalQueries),
+          fetchCashConversionData(source, years)
+        ]);
+        return enrichRealtimeQuoteData(addCashConversionMetric(mergedSource, cashConversionData, years));
+      }
+
+      function cashConversionYears(now = new Date()) {
+        const year = Number(new Intl.DateTimeFormat("en", { timeZone: "Asia/Shanghai", year: "numeric" }).format(now));
+        return [year - 3, year - 2, year - 1];
+      }
+
+      function buildCashConversionQuery(query, years) {
+        return buildEastmoneyQuery([
+          query.replace(/;+$/, ""),
+          ...years.flatMap(year => [
+            `${year}年年报经营活动产生的现金流量净额`,
+            `${year}年年报净利润`
+          ])
+        ]);
+      }
+
+      async function fetchCashConversionData(source, years) {
+        if (!source.rows.length) return { rows: [], failed: false };
+        try {
+          const query = buildCashConversionQuery(source.query, years);
+          const result = normalizeEastmoneyResponse(await requestEastmoney(query), query);
+          return { rows: result.rows, failed: false };
+        } catch (error) {
+          console.warn("Cash conversion metrics failed", error);
+          return { rows: [], failed: true };
+        }
+      }
+
+      function annualCashConversionValue(row, prefix, year) {
+        const value = row[`${prefix}{${year}-12-31}`];
+        if (typeof value === "number") return Number.isFinite(value) ? value : NaN;
+        if (typeof value !== "string") return NaN;
+        const [amount, period] = value.split("|");
+        // Require the exact annual period when the provider includes a report label.
+        if (period && reportDateFromPeriodText(period) !== `${year}.12.31`) return NaN;
+        const match = amount.replace(/,/g, "").trim().match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)\s*(万亿|亿|万)?(?:元)?$/i);
+        if (!match) return NaN;
+        const scale = { "万亿": 1e12, "亿": 1e8, "万": 1e4 }[match[2]] || 1;
+        const number = Number(match[1]) * scale;
+        return Number.isFinite(number) ? number : NaN;
+      }
+
+      function calculateCashConversion(row, years) {
+        let cashFlow = 0;
+        let netProfit = 0;
+        const missingYears = [];
+        years.forEach(year => {
+          const cash = annualCashConversionValue(row, "NETOPERATECASHFLOW", year);
+          // NETPROFIT includes minority interests, matching consolidated cash flow.
+          const profit = annualCashConversionValue(row, "NETPROFIT", year);
+          if (!Number.isFinite(cash) || !Number.isFinite(profit)) {
+            missingYears.push(year);
+          } else {
+            cashFlow += cash;
+            netProfit += profit;
+          }
+        });
+        if (missingYears.length) {
+          return { value: null, status: "数据不全", detail: `${missingYears.join("、")}年年报现金流或净利润数据缺失，或报告期不符` };
+        }
+        if (!Number.isFinite(cashFlow) || !Number.isFinite(netProfit)) {
+          return { value: null, status: "数据异常", detail: "累计金额无效，暂不计算" };
+        }
+        if (netProfit <= 0) {
+          return { value: null, status: "不适用", detail: "三年累计净利润≤0，不计算净现比", cashFlow, netProfit };
+        }
+        const value = cashFlow / netProfit;
+        if (!Number.isFinite(value)) {
+          return { value: null, status: "数据异常", detail: "比值无效，暂不计算" };
+        }
+        return { value, status: "", detail: "", cashFlow, netProfit };
+      }
+
+      function addCashConversionMetric(source, data, years) {
+        const period = `${years[0]}—${years[2]}年报`;
+        const byCode = new Map(data.rows.map(row => [String(row.SECURITY_CODE || "").trim(), row]));
+        const annualColumns = years.map(year => ({
+          key: `NETOPERATECASHFLOW{${year}-12-31}`,
+          title: String(year),
+          dateMsg: `${year}.12.31`,
+          sortable: true,
+          unit: "元",
+          description: `${year}年年报经营活动产生的现金流量净额，金额按元、万元或亿元显示。`
+        }));
+        const column = {
+          key: cashConversionKey,
+          title: "累计净现比",
+          dateMsg: period,
+          sortable: true,
+          unit: "倍",
+          description: `${period}经营活动现金流量净额合计 ÷ 同期合并净利润合计（含少数股东损益）。按数据源披露的金额计算，显示两位小数；数据不全或累计净利润≤0时不计算。`
+        };
+        return {
+          ...source,
+          columns: [
+            ...source.columns.filter(item => item.key !== cashConversionKey && !isAnnualOperatingCashFlowColumn(item.key)),
+            ...annualColumns,
+            column
+          ],
+          rows: source.rows.map(row => {
+            const metrics = byCode.get(String(row.SECURITY_CODE || "").trim());
+            const annualAmounts = Object.fromEntries(years.map((year, index) => {
+              const amount = data.failed ? NaN : annualCashConversionValue(metrics || {}, "NETOPERATECASHFLOW", year);
+              return [annualColumns[index].key, Number.isFinite(amount) ? amount : null];
+            }));
+            const result = data.failed
+              ? { value: null, status: "加载失败", detail: "三年年报数据加载失败，稍后刷新重试" }
+              : calculateCashConversion(metrics || {}, years);
+            return { ...row, ...annualAmounts, [cashConversionKey]: result.value, cashConversionDetails: { ...result, period } };
+          })
+        };
       }
 
       async function fetchSupplementalMetricSource(source, supplementalQueries) {
@@ -2224,6 +2372,11 @@
         const bv = b[key];
         const an = numericValue(av);
         const bn = numericValue(bv);
+        if (key === cashConversionKey || isAnnualOperatingCashFlowColumn(key)) {
+          if (Number.isNaN(an) && Number.isNaN(bn)) return 0;
+          if (Number.isNaN(an)) return 1;
+          if (Number.isNaN(bn)) return -1;
+        }
         if (!Number.isNaN(an) && !Number.isNaN(bn) && an !== bn) return (an - bn) * direction;
         return String(av || "").localeCompare(String(bv || ""), "zh-CN", { numeric: true }) * direction;
       }
@@ -2804,7 +2957,7 @@
         const date = childLabelMode === "title-date" || !childLabelMode ? subtitle : "";
         return `
           <th class="${stickyClass} ${widthClass}" ${rowSpan ? 'rowspan="2"' : ""}>
-            <button class="th-button" type="button" data-sort-key="${escapeAttr(column.key)}" title="${escapeAttr(cleanTitle)}">
+            <button class="th-button" type="button" data-sort-key="${escapeAttr(column.key)}" title="${escapeAttr(column.description || cleanTitle)}">
               <span class="th-title">${escapeHtml(label)}${mark}</span>
               ${date ? `<span class="th-date">${escapeHtml(date)}</span>` : ""}
             </button>
@@ -2851,6 +3004,12 @@
       }
 
       function formatValue(value, column, row) {
+        if (column.key === cashConversionKey) return formatCashConversion(value, row);
+        if (isAnnualOperatingCashFlowColumn(column.key)) {
+          if (!Number.isFinite(value)) return row.cashConversionDetails?.status === "加载失败" ? "加载失败" : "数据不全";
+          const amount = `${formatAmount(value)}元`;
+          return `<span class="cell-main" title="${escapeAttr(`${column.title}年经营活动现金流量净额：${value.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}元`)}">${escapeHtml(amount)}</span>`;
+        }
         if (value === null || value === undefined || value === "") return "-";
         if (column.key === "SECURITY_CODE") {
           const detailUrl = quoteDetailUrlForRow(row);
@@ -2866,6 +3025,17 @@
         if (shouldHideReportSuffix(column)) return `<span class="cell-main">${escapeHtml(main)}</span>`;
         const sub = cellSubtitleForValue(parts.slice(1).join(" "), column);
         return `<span class="cell-main">${escapeHtml(main)}</span>${sub ? `<span class="cell-sub">${escapeHtml(sub)}</span>` : ""}`;
+      }
+
+      function formatCashConversion(value, row) {
+        const details = row.cashConversionDetails || {};
+        const valid = typeof value === "number" && Number.isFinite(value);
+        const label = valid ? `${value.toFixed(2)}倍` : (details.status || "数据不全");
+        const amounts = Number.isFinite(details.cashFlow) && Number.isFinite(details.netProfit)
+          ? `经营现金流合计 ${formatAmount(details.cashFlow)}元；合并净利润合计 ${formatAmount(details.netProfit)}元。`
+          : "";
+        const description = `${details.period || ""}：${amounts}${details.detail || "经营现金流合计 ÷ 合并净利润合计；按数据源披露金额计算。"}`;
+        return `<span class="cell-main" title="${escapeAttr(description)}">${escapeHtml(label)}</span>`;
       }
 
       function cellSubtitleForValue(valueSuffix, column) {
@@ -3070,6 +3240,7 @@
       }
 
       function numericValue(value) {
+        if (typeof value === "number") return Number.isFinite(value) ? value : NaN;
         if (value === null || value === undefined) return NaN;
         const raw = String(value).split("|")[0].replace(/,/g, "").trim();
         if (!raw || raw === "-") return NaN;
