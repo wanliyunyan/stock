@@ -1004,14 +1004,14 @@
           <label class="range-filter online-filter">
             <span class="range-label">合同负债同比增长率</span>
             <span class="range-inputs">
-              <input class="range-input" id="yoyThresholdInput" type="number" step="0.01" value="100" inputmode="decimal" placeholder="最小" aria-label="合同负债同比增长率最小值">
+              <input class="range-input" id="yoyThresholdInput" type="number" step="0.01" value="30" inputmode="decimal" placeholder="最小" aria-label="合同负债同比增长率最小值">
               <input class="range-input" id="yoyMaxInput" type="number" step="0.01" inputmode="decimal" placeholder="最大" aria-label="合同负债同比增长率最大值">
             </span>
           </label>
           <label class="range-filter online-filter">
             <span class="range-label">合同负债环比增长率</span>
             <span class="range-inputs">
-              <input class="range-input" id="qoqThresholdInput" type="number" step="0.01" value="100" inputmode="decimal" placeholder="最小" aria-label="合同负债环比增长率最小值">
+              <input class="range-input" id="qoqThresholdInput" type="number" step="0.01" value="30" inputmode="decimal" placeholder="最小" aria-label="合同负债环比增长率最小值">
               <input class="range-input" id="qoqMaxInput" type="number" step="0.01" inputmode="decimal" placeholder="最大" aria-label="合同负债环比增长率最大值">
             </span>
           </label>
@@ -1044,14 +1044,14 @@
             <label class="range-filter">
               <span class="range-label">毛利率</span>
               <span class="range-inputs">
-                <input class="range-input" id="grossMarginMinInput" type="number" step="0.01" inputmode="decimal" placeholder="最小" aria-label="毛利率最小值">
+                <input class="range-input" id="grossMarginMinInput" type="number" step="0.01" value="16" inputmode="decimal" placeholder="最小" aria-label="毛利率最小值">
                 <input class="range-input" id="grossMarginMaxInput" type="number" step="0.01" inputmode="decimal" placeholder="最大" aria-label="毛利率最大值">
               </span>
             </label>
             <label class="range-filter">
               <span class="range-label">净利率</span>
               <span class="range-inputs">
-                <input class="range-input" id="netMarginMinInput" type="number" step="0.01" inputmode="decimal" placeholder="最小" aria-label="净利率最小值">
+                <input class="range-input" id="netMarginMinInput" type="number" step="0.01" value="8" inputmode="decimal" placeholder="最小" aria-label="净利率最小值">
                 <input class="range-input" id="netMarginMaxInput" type="number" step="0.01" inputmode="decimal" placeholder="最大" aria-label="净利率最大值">
               </span>
             </label>
@@ -1059,20 +1059,20 @@
               <span class="range-label">市盈率(动)</span>
               <span class="range-inputs">
                 <input class="range-input" id="peMinInput" type="number" step="0.01" inputmode="decimal" placeholder="最小" aria-label="市盈率动最小值">
-                <input class="range-input" id="peMaxInput" type="number" step="0.01" inputmode="decimal" placeholder="最大" aria-label="市盈率动最大值">
+                <input class="range-input" id="peMaxInput" type="number" step="0.01" value="35" inputmode="decimal" placeholder="最大" aria-label="市盈率动最大值">
               </span>
             </label>
             <label class="range-filter">
               <span class="range-label">市净率</span>
               <span class="range-inputs">
                 <input class="range-input" id="pbMinInput" type="number" step="0.01" inputmode="decimal" placeholder="最小" aria-label="市净率最小值">
-                <input class="range-input" id="pbMaxInput" type="number" step="0.01" inputmode="decimal" placeholder="最大" aria-label="市净率最大值">
+                <input class="range-input" id="pbMaxInput" type="number" step="0.01" value="4" inputmode="decimal" placeholder="最大" aria-label="市净率最大值">
               </span>
             </label>
             <label class="range-filter">
               <span class="range-label">股息率</span>
               <span class="range-inputs">
-                <input class="range-input" id="dividendYieldMinInput" type="number" step="0.01" inputmode="decimal" placeholder="最小" aria-label="股息率最小值">
+                <input class="range-input" id="dividendYieldMinInput" type="number" step="0.01" value="2" inputmode="decimal" placeholder="最小" aria-label="股息率最小值">
                 <input class="range-input" id="dividendYieldMaxInput" type="number" step="0.01" inputmode="decimal" placeholder="最大" aria-label="股息率最大值">
               </span>
             </label>
@@ -1275,7 +1275,9 @@
       ]);
       let activeSource = emptySource;
       let dataStatus = { type: "loading", error: "" };
-      let sortState = { key: "SERIAL", direction: "asc" };
+      // The PB percentile column includes the report date in its key, so resolve
+      // the concrete key whenever a new response supplies the column.
+      let sortState = { key: "", direction: "asc" };
       let rows = [];
       let displayGroups = [];
       let leafColumns = [];
@@ -1283,6 +1285,7 @@
       let liveRequestId = 0;
       let liveInFlight = false;
       let livePending = false;
+      let lastDefaultRoeValue = null;
       let searchQueue = Promise.resolve();
       let lastSearchRequestAt = 0;
       let clientFingerprint = "";
@@ -1336,9 +1339,34 @@
         rows = Array.isArray(activeSource.rows) ? activeSource.rows.slice() : [];
         displayGroups = buildDisplayGroups(activeSource.columns || []);
         leafColumns = displayGroups.flatMap(group => group.children || [group.column]);
+        setDefaultSortColumn();
+        setDefaultRoeFilter();
         filterKeys = Object.fromEntries(numericFilters.map(filter => [filter.id, findFilterColumnKey(filter)]));
         setMeta();
         render();
+      }
+
+      function setDefaultSortColumn() {
+        const pbPercentileColumn = leafColumns.find(column => isPbPercentileColumn(column?.key));
+        if (!pbPercentileColumn) return;
+        const currentColumnExists = leafColumns.some(column => column.key === sortState.key);
+        if (!currentColumnExists) sortState = { key: pbPercentileColumn.key, direction: "asc" };
+      }
+
+      function setDefaultRoeFilter() {
+        const roeFilter = numericFilters.find(filter => filter.id === "roe");
+        const roeColumn = latestReportMetricColumnForPrefix(leafColumns, "ROE_WEIGHT");
+        if (!roeFilter || !roeColumn) return;
+        const reportDate = parseReportDateValue(reportDateTitleText(roeColumn));
+        if (!reportDate) return;
+        const month = Number(reportDate.title.split(".")[1]);
+        const defaultValue = { 3: 2.5, 6: 5, 9: 7.5, 12: 10 }[month];
+        if (!defaultValue) return;
+        const currentValue = roeFilter.minInput.value.trim();
+        if (lastDefaultRoeValue === null || currentValue === String(lastDefaultRoeValue)) {
+          roeFilter.minInput.value = String(defaultValue);
+          lastDefaultRoeValue = defaultValue;
+        }
       }
 
       function applyRealtimeColumnDate(column, dateText) {
@@ -2482,7 +2510,7 @@
         const bv = b[key];
         const an = numericValue(av);
         const bn = numericValue(bv);
-        if (key === cashConversionKey || isAnnualOperatingCashFlowColumn(key)) {
+        if (key === cashConversionKey || isAnnualOperatingCashFlowColumn(key) || isPbPercentileColumn(key)) {
           if (Number.isNaN(an) && Number.isNaN(bn)) return 0;
           if (Number.isNaN(an)) return 1;
           if (Number.isNaN(bn)) return -1;
@@ -3223,6 +3251,10 @@
       function isValuationPercentileColumn(key) {
         const value = String(key || "");
         return valuationPercentilePrefixes.some(prefix => value.startsWith(prefix));
+      }
+
+      function isPbPercentileColumn(key) {
+        return String(key || "").startsWith("INDEX_PERCENTILE_PB");
       }
 
       function shouldHideReportSuffix(column) {
