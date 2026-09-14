@@ -318,6 +318,14 @@
       font-weight: 700;
     }
 
+    .filter-actions {
+      display: flex;
+      flex: 0 0 auto;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .refresh-button,
     .reset-button {
       flex: 0 0 auto;
       width: 58px;
@@ -326,6 +334,11 @@
       border-color: var(--line-strong);
       background: #f8fbff;
       color: var(--accent);
+    }
+
+    .refresh-button:disabled {
+      opacity: 0.6;
+      cursor: wait;
     }
 
     .control {
@@ -941,7 +954,7 @@
         grid-template-columns: 1fr;
       }
 
-      .reset-button {
+      .filter-actions {
         justify-self: start;
       }
 
@@ -1098,7 +1111,10 @@
               </span>
             </label>
           </div>
-          <button class="reset-button" id="resetButton" type="button">重置</button>
+          <div class="filter-actions">
+            <button class="refresh-button" id="refreshButton" type="button" title="按当前条件重新获取并筛选数据">刷新</button>
+            <button class="reset-button" id="resetButton" type="button">重置</button>
+          </div>
         </div>
       </section>
 
@@ -1159,6 +1175,7 @@
       const tableWrap = document.getElementById("tableWrap");
       const tableLoadingOverlay = document.getElementById("tableLoadingOverlay");
       const searchInput = document.getElementById("searchInput");
+      const refreshButton = document.getElementById("refreshButton");
       const resetButton = document.getElementById("resetButton");
       const chartPopover = document.getElementById("chartPopover");
       const chartTitle = document.getElementById("chartTitle");
@@ -1325,6 +1342,9 @@
           input.addEventListener("input", () => { ++liveRequestId; livePending = false; });
           input.addEventListener("change", requestLiveUpdate);
         });
+      });
+      refreshButton.addEventListener("click", () => {
+        if (!liveInFlight) requestLiveUpdate();
       });
       resetButton.addEventListener("click", () => {
         searchInput.value = "";
@@ -2110,6 +2130,8 @@
         const isCurrent = () => requestId === liveRequestId;
         liveInFlight = true;
         livePending = false;
+        refreshButton.disabled = true;
+        refreshButton.textContent = "刷新中";
         const quoteRequests = new Map();
         const quoteKey = source => uniqueSecurities(source.rows).map(item => `${item.market}.${item.code}`).sort().join(",");
         const loadQuotes = source => {
@@ -2146,6 +2168,8 @@
           await previousQuotes;
         } finally {
           liveInFlight = false;
+          refreshButton.disabled = false;
+          refreshButton.textContent = "刷新";
           // Only continue when the user committed another query during this request.
           if (livePending) refreshLiveData();
         }
