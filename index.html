@@ -2033,7 +2033,9 @@
 
       function isHiddenColumn(column) {
         if (!column || column["hiddenNeed"]) return true;
-        return hiddenKeys.has(column.key) || String(column.key || "").startsWith("IFSTSTOCK");
+        const key = String(column.key || "");
+        // Eastmoney's companion date columns are metadata, not metric values.
+        return hiddenKeys.has(key) || key.startsWith("IFSTSTOCK") || key.endsWith("&&DATE");
       }
 
       function orderDisplayGroups(groups) {
@@ -2091,7 +2093,7 @@
       }
 
       function findFilterColumn(filter, source) {
-        const columns = (source && source.columns) || [];
+        const columns = ((source && source.columns) || []).filter(column => !isHiddenColumn(column));
         if (filter.key) return columns.find(item => item.key === filter.key) || null;
         const column = columns.find(item => {
           const key = String(item.key || "");
