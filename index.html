@@ -1385,7 +1385,7 @@
         const roeFilter = numericFilters.find(filter => filter.id === "roe");
         const roeColumn = latestReportMetricColumnForPrefix(leafColumns, "ROE_WEIGHT");
         if (!roeFilter || !roeColumn) return;
-        const reportDate = parseReportDateValue(reportDateTitleText(roeColumn));
+        const reportDate = earliestReportDateFromColumnValues(roeColumn);
         if (!reportDate) return;
         const month = Number(reportDate.title.split(".")[1]);
         const defaultValue = { 3: 2.5, 6: 5, 9: 7.5, 12: 10 }[month];
@@ -3379,14 +3379,29 @@
 
       function reportDateFromColumnValues(column) {
         if (!column || !column.key) return "";
-        return rows.reduce((latest, row) => {
-          const value = String(row[column.key] || "");
-          const reportText = value.includes("|") ? value.split("|").slice(1).join(" ") : "";
-          const title = reportDateFromPeriodText(reportText);
-          const candidate = parseReportDateValue(title);
+        return reportDateCandidatesFromColumnValues(column).reduce((latest, candidate) => {
           if (!candidate) return latest;
           return !latest || candidate.time > latest.time ? candidate : latest;
         }, null)?.title || "";
+      }
+
+      function reportDateCandidatesFromColumnValues(column) {
+        if (!column || !column.key || !Array.isArray(rows)) return [];
+        return rows.map(row => {
+          const value = String(row[column.key] || "");
+          const reportText = value.includes("|") ? value.split("|").slice(1).join(" ") : "";
+          const title = reportDateFromPeriodText(reportText);
+          return parseReportDateValue(title);
+        });
+      }
+
+      function earliestReportDateFromColumnValues(column) {
+        const candidates = reportDateCandidatesFromColumnValues(column);
+        // Advance the global default only after every row reaches the new period.
+        if (!candidates.length || candidates.some(candidate => !candidate)) return null;
+        return candidates.reduce((earliest, candidate) => {
+          return !earliest || candidate.time < earliest.time ? candidate : earliest;
+        }, null);
       }
 
       function reportDateFromPeriodText(value) {

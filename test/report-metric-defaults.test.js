@@ -14,6 +14,7 @@ const constants = [
 // Eastmoney returns an extra report-date column alongside each numeric metric.
 // Its query date is newer than the actual reporting period in the numeric cell.
 function reportSource(period = "2026半年报") {
+  const periods = Array.isArray(period) ? period : [period];
   return {
     columns: [
       { title: "加权净资产收益率ROE", key: "ROE_WEIGHT{2026-10-09}", dateMsg: "截至2026.10.09最新", unit: "%" },
@@ -23,16 +24,14 @@ function reportSource(period = "2026半年报") {
       { title: "销售净利率", key: "XSJLL{2026-10-09}", dateMsg: "截至2026.10.09最新", unit: "%" },
       { title: "销售净利率更新时间", key: "XSJLL{2026-10-09}&&DATE", dateMsg: "截至2026.10.09最新", unit: "" }
     ],
-    rows: [
-      {
-        "ROE_WEIGHT{2026-10-09}": `4.90|${period}`,
-        "ROE_WEIGHT{2026-10-09}&&DATE": period,
-        "XSMLL{2026-10-09}": `35.51|${period}`,
-        "XSMLL{2026-10-09}&&DATE": period,
-        "XSJLL{2026-10-09}": `22.56|${period}`,
-        "XSJLL{2026-10-09}&&DATE": period
-      }
-    ]
+    rows: periods.map(reportPeriod => ({
+      "ROE_WEIGHT{2026-10-09}": `4.90|${reportPeriod}`,
+      "ROE_WEIGHT{2026-10-09}&&DATE": reportPeriod,
+      "XSMLL{2026-10-09}": `35.51|${reportPeriod}`,
+      "XSMLL{2026-10-09}&&DATE": reportPeriod,
+      "XSJLL{2026-10-09}": `22.56|${reportPeriod}`,
+      "XSJLL{2026-10-09}&&DATE": reportPeriod
+    }))
   };
 }
 
@@ -104,4 +103,14 @@ test("untouched ROE defaults advance when a new reporting period arrives", () =>
   context.rows = reportSource("2026三季报").rows;
   context.setDefaultRoeFilter();
   assert.equal(context.numericFilters[0].minInput.value, "7.5");
+});
+
+test("ROE default waits for every row to reach the current reporting period", () => {
+  const mixedContext = createContext(reportSource(["2026三季报", "2026半年报"]));
+  mixedContext.setDefaultRoeFilter();
+  assert.equal(mixedContext.numericFilters[0].minInput.value, "5");
+
+  const completeContext = createContext(reportSource(["2026三季报", "2026三季报"]));
+  completeContext.setDefaultRoeFilter();
+  assert.equal(completeContext.numericFilters[0].minInput.value, "7.5");
 });
