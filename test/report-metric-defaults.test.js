@@ -35,6 +35,17 @@ function reportSource(period = "2026半年报") {
   };
 }
 
+function reportSourceWithDateMetadataOnly(period = "2026半年报") {
+  const source = reportSource(period);
+  source.rows = source.rows.map(row => ({
+    ...row,
+    "ROE_WEIGHT{2026-10-09}": "4.90",
+    "XSMLL{2026-10-09}": "35.51",
+    "XSJLL{2026-10-09}": "22.56"
+  }));
+  return source;
+}
+
 function createContext(source = reportSource()) {
   const numericFilters = [
     { id: "roe", keyPrefix: "ROE_WEIGHT", scale: 1, minInput: { value: "" }, maxInput: { value: "" } }
@@ -113,4 +124,29 @@ test("ROE default waits for every row to reach the current reporting period", ()
   const completeContext = createContext(reportSource(["2026三季报", "2026三季报"]));
   completeContext.setDefaultRoeFilter();
   assert.equal(completeContext.numericFilters[0].minInput.value, "7.5");
+});
+
+test("ROE default ignores an older outlier until the latest report period is complete", () => {
+  const context = createContext(reportSource(["2026三季报", "2026一季报"]));
+  context.setDefaultRoeFilter();
+  assert.equal(context.numericFilters[0].minInput.value, "5");
+});
+
+test("ROE default reads the companion report-date column when metric values have no suffix", () => {
+  const mixedContext = createContext(reportSourceWithDateMetadataOnly(["2026三季报", "2026半年报"]));
+  mixedContext.setDefaultRoeFilter();
+  assert.equal(mixedContext.numericFilters[0].minInput.value, "5");
+
+  const completeContext = createContext(reportSourceWithDateMetadataOnly(["2026三季报", "2026三季报"]));
+  completeContext.setDefaultRoeFilter();
+  assert.equal(completeContext.numericFilters[0].minInput.value, "7.5");
+});
+
+test("ROE default falls back one period when a row has no report-date value", () => {
+  const source = reportSource(["2026三季报", "2026三季报"]);
+  source.rows[1]["ROE_WEIGHT{2026-10-09}"] = "4.90";
+  source.rows[1]["ROE_WEIGHT{2026-10-09}&&DATE"] = "";
+  const context = createContext(source);
+  context.setDefaultRoeFilter();
+  assert.equal(context.numericFilters[0].minInput.value, "5");
 });

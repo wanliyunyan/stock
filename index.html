@@ -1385,7 +1385,7 @@
         const roeFilter = numericFilters.find(filter => filter.id === "roe");
         const roeColumn = latestReportMetricColumnForPrefix(leafColumns, "ROE_WEIGHT");
         if (!roeFilter || !roeColumn) return;
-        const reportDate = earliestReportDateFromColumnValues(roeColumn);
+        const reportDate = reportDateForRoeDefault(roeColumn);
         if (!reportDate) return;
         const month = Number(reportDate.title.split(".")[1]);
         const defaultValue = { 3: 2.5, 6: 5, 9: 7.5, 12: 10 }[month];
@@ -3387,21 +3387,44 @@
 
       function reportDateCandidatesFromColumnValues(column) {
         if (!column || !column.key || !Array.isArray(rows)) return [];
+        const dateColumn = reportDateColumnForMetric(column);
         return rows.map(row => {
           const value = String(row[column.key] || "");
           const reportText = value.includes("|") ? value.split("|").slice(1).join(" ") : "";
-          const title = reportDateFromPeriodText(reportText);
+          const dateValue = dateColumn ? String(row[dateColumn.key] || "") : "";
+          const title = reportDateFromPeriodText(reportText) || reportDateFromPeriodText(dateValue);
           return parseReportDateValue(title);
         });
       }
 
-      function earliestReportDateFromColumnValues(column) {
+      function reportDateColumnForMetric(column) {
+        if (!column || !column.key || !activeSource || !Array.isArray(activeSource.columns)) return null;
+        const dateKey = `${column.key}&&DATE`;
+        return activeSource.columns.find(item => item && item.key === dateKey) || null;
+      }
+
+      function reportDateForRoeDefault(column) {
         const candidates = reportDateCandidatesFromColumnValues(column);
-        // Advance the global default only after every row reaches the new period.
-        if (!candidates.length || candidates.some(candidate => !candidate)) return null;
-        return candidates.reduce((earliest, candidate) => {
-          return !earliest || candidate.time < earliest.time ? candidate : earliest;
+        const validCandidates = candidates.filter(Boolean);
+        if (!validCandidates.length) return null;
+        const latest = validCandidates.reduce((result, candidate) => {
+          return !result || candidate.time > result.time ? candidate : result;
         }, null);
+        const allRowsAtLatest = candidates.length === rows.length &&
+          candidates.every(candidate => candidate && candidate.time === latest.time);
+        if (allRowsAtLatest) return latest;
+        return previousReportDateForDefault(latest);
+      }
+
+      function previousReportDateForDefault(reportDate) {
+        const match = String(reportDate?.title || "").match(/^(\d{4})\.(\d{1,2})\./);
+        if (!match) return reportDate;
+        const year = Number(match[1]);
+        const month = Number(match[2]);
+        const previousMonth = { 12: 9, 9: 6, 6: 3 }[month];
+        if (!previousMonth) return reportDate;
+        const previousDay = previousMonth === 3 ? 31 : (previousMonth === 6 ? 30 : 30);
+        return parseReportDateValue(`${year}.${previousMonth}.${previousDay}`) || reportDate;
       }
 
       function reportDateFromPeriodText(value) {
