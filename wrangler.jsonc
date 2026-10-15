@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "stock",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-15",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "VISIT_COUNTER",
+        "class_name": "VisitorCounter"
+      }
+    ]
+  },
+  "exports": {
+    "VisitorCounter": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  }
+}

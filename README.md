@@ -6,6 +6,7 @@
 ## 功能
 
 - 通过 Cloudflare Worker 读取东方财富数据
+- 在页面顶部显示由 Cloudflare Durable Object 保存的公开访问量（PV）
 - 展示最新价、市盈率、市净率、总市值等基础指标
 - 展示净资产收益率、毛利率、净利率等财务指标
 - “经营活动现金流”分组展示近三个完整年度的现金流金额和累计净现比，支持排序及按净现比倍数筛选
@@ -55,11 +56,18 @@ Worker 地址按以下优先级选择：
 
 仓库根目录的 `worker.js` 是 Cloudflare Worker 模块代码：
 
-1. 在 Cloudflare Workers 中创建一个 Worker
-2. 使用 `worker.js` 的内容替换默认代码
-3. 部署并取得形如 `https://your-worker.workers.dev` 的访问地址
-4. 直接打开该地址，确认返回内容中的 `ok` 为 `true`
+1. 确认已经安装 Node.js，并在 Cloudflare 中登录：`npx wrangler login`
+2. 打开 `wrangler.jsonc`，把 `name` 改成你的 Worker 名称；默认值 `stock` 对应项目当前使用的 Worker
+3. 在仓库根目录部署：`npx wrangler deploy`
+4. 直接打开 `https://your-worker.workers.dev`，确认返回内容中的 `ok` 为 `true`
 5. 按“配置自己的 Worker”一节将地址写入页面
+
+`wrangler.jsonc` 会同时配置 `VISIT_COUNTER` Durable Object 绑定，并使用 SQLite 存储。第一次部署会自动创建
+`VisitorCounter` 命名空间；只粘贴 `worker.js` 而不部署这个绑定时，页面访问量会保持为 `-`。相关配置方式见
+[Cloudflare Durable Objects 文档](https://developers.cloudflare.com/durable-objects/get-started/)。
+
+页面显示的是 PV：每次打开页面或刷新页面会增加一次，重复刷新、机器人请求也会计入；它不是去重后的独立访客数（UV）。
+访问量接口是公开的，因此任何人都可以请求它并影响计数，这个数字适合做公开展示，不适合作为审计数据。
 
 Worker URL 是公开的接口地址，不是密钥。不要把 Cloudflare API Token、账户凭证或其他密钥
 写入 `index.html`、`worker.js` 或提交到 Git 仓库。

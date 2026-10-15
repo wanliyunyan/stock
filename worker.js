@@ -1,9 +1,22 @@
+import { DurableObject } from "cloudflare:workers";
+
 const EASTMONEY_SEARCH_API = "https://np-tjxg-g.eastmoney.com/api/smart-tag/stock/v3/pw/search-code";
 const EASTMONEY_QUOTE_API = "https://push2.eastmoney.com/api/qt/ulist.np/get";
 const EASTMONEY_QUOTE_FALLBACK_API = "https://push2his.eastmoney.com/api/qt/ulist.np/get";
+const VISIT_COUNTER_NAME = "site";
+
+export class VisitorCounter extends DurableObject {
+    async increment() {
+        const storedValue = await this.ctx.storage.get("count");
+        const currentValue = Number.isSafeInteger(storedValue) && storedValue >= 0 ? storedValue : 0;
+        const nextValue = currentValue + 1;
+        await this.ctx.storage.put("count", nextValue);
+        return nextValue;
+    }
+}
 
 export default {
-    async fetch(request) {
+    async fetch(request, env) {
         const url = new URL(request.url);
 
         if (request.method === "OPTIONS") {
@@ -14,7 +27,7 @@ export default {
             return jsonResponse(
                 {
                     ok: true,
-                    routes: ["/api/stocks", "/api/quotes"],
+                    routes: ["/api/stocks", "/api/quotes", "/api/visits"],
                     note: "Use this Worker as the API base for the GitHub Pages frontend."
                 },
                 200
@@ -29,12 +42,38 @@ export default {
             return proxyQuotes(request);
         }
 
+        if (url.pathname === "/api/visits") {
+            return recordVisit(request, env);
+        }
+
         return new Response("Not Found", {
             status: 404,
             headers: corsHeaders({ "Content-Type": "text/plain; charset=utf-8" })
         });
     }
 };
+
+async function recordVisit(request, env) {
+    if (request.method !== "GET") {
+        return methodNotAllowed(["GET"]);
+    }
+
+    const counterNamespace = env && env.VISIT_COUNTER;
+    if (!counterNamespace || typeof counterNamespace.getByName !== "function") {
+        return jsonResponse({ ok: false, error: "Visit counter is not configured" }, 503);
+    }
+
+    try {
+        const counter = counterNamespace.getByName(VISIT_COUNTER_NAME);
+        if (!counter || typeof counter.increment !== "function") {
+            return jsonResponse({ ok: false, error: "Visit counter is not configured" }, 503);
+        }
+        const count = await counter.increment();
+        return jsonResponse({ ok: true, count }, 200);
+    } catch (error) {
+        return jsonResponse({ ok: false, error: cleanError(error) }, 502);
+    }
+}
 
 async function proxySearch(request) {
     if (request.method !== "POST") {

@@ -95,7 +95,7 @@
 
     .meta-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(118px, auto));
+      grid-template-columns: repeat(3, minmax(118px, auto));
       gap: 8px;
     }
 
@@ -1003,6 +1003,10 @@
           <span>来源 ID</span>
           <strong id="sourceId">-</strong>
         </div>
+        <div class="meta-item">
+          <span>访问量</span>
+          <strong id="visitCount" aria-live="polite">-</strong>
+        </div>
       </div>
     </header>
 
@@ -1179,6 +1183,7 @@
       const searchInput = document.getElementById("searchInput");
       const refreshButton = document.getElementById("refreshButton");
       const resetButton = document.getElementById("resetButton");
+      const visitCount = document.getElementById("visitCount");
       const chartPopover = document.getElementById("chartPopover");
       const chartTitle = document.getElementById("chartTitle");
       const chartCode = document.getElementById("chartCode");
@@ -1325,6 +1330,7 @@
       };
 
       applyData(emptySource, { type: "loading", error: "" });
+      recordPageVisit();
       if (apiBaseUrl || isLocalDev) {
         clearLegacyDataCache();
         refreshLiveData();
@@ -1535,6 +1541,26 @@
 
       function normalizeApiBaseUrl(value) {
         return String(value || "").trim().replace(/\/+$/, "");
+      }
+
+      async function recordPageVisit() {
+        if (!apiBaseUrl) return;
+        try {
+          const { response, responseText } = await fetchStockApi(stockApiUrl("/api/visits", ""), {
+            cache: "no-store",
+            headers: { "Accept": "application/json" }
+          });
+          if (!response.ok) throw new Error(`访问量接口请求失败（状态码 ${response.status}）`);
+          const apiData = parseJsonResponse(responseText, "访问量接口返回格式异常");
+          const count = Number(apiData?.count);
+          if (apiData?.ok !== true || !Number.isSafeInteger(count) || count < 0) {
+            throw new Error("访问量接口返回数据异常");
+          }
+          visitCount.textContent = count.toLocaleString("zh-CN");
+        } catch (error) {
+          visitCount.textContent = "-";
+          console.warn("访问量加载失败", cleanError(error));
+        }
       }
 
       function stockApiUrl(path, fallbackUrl) {
