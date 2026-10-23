@@ -313,7 +313,8 @@
       box-shadow: 0 0 0 3px rgba(36, 84, 214, 0.12);
     }
 
-    .search-filter .control {
+    .search-filter .control,
+    .report-filter .control {
       height: 27px;
       border-radius: 6px;
       background: #f8fbff;
@@ -1053,6 +1054,13 @@
               <span class="range-label">搜索代码、名称</span>
               <input class="control" id="searchInput" type="search" autocomplete="off" placeholder="输入代码或名称">
             </label>
+            <label class="range-filter report-filter">
+              <span class="range-label">当季财报进度</span>
+              <select class="control" id="reportDisclosureSelect" aria-label="按当季财报披露进度筛选">
+                <option value="reported">本季已披露</option>
+                <option value="pending">本季待披露</option>
+              </select>
+            </label>
             <label class="range-filter">
               <span class="range-label">净资产收益率</span>
               <span class="range-inputs">
@@ -1181,6 +1189,7 @@
       const tableWrap = document.getElementById("tableWrap");
       const tableLoadingOverlay = document.getElementById("tableLoadingOverlay");
       const searchInput = document.getElementById("searchInput");
+      const reportDisclosureSelect = document.getElementById("reportDisclosureSelect");
       const refreshButton = document.getElementById("refreshButton");
       const resetButton = document.getElementById("resetButton");
       const visitCount = document.getElementById("visitCount");
@@ -1339,6 +1348,10 @@
       }
 
       searchInput.addEventListener("input", render);
+      reportDisclosureSelect.addEventListener("change", () => {
+        setDefaultRoeFilter();
+        render();
+      });
       localNumericFilters.forEach(filter => {
         [filter.minInput, filter.maxInput].forEach(input => {
           if (input) input.addEventListener("input", render);
@@ -1356,6 +1369,7 @@
       });
       resetButton.addEventListener("click", () => {
         searchInput.value = "";
+        reportDisclosureSelect.value = "reported";
         clearNumericFilters(localNumericFilters);
         render();
       });
@@ -1385,7 +1399,10 @@
         const roeFilter = numericFilters.find(filter => filter.id === "roe");
         const roeColumn = latestReportMetricColumnForPrefix(leafColumns, "ROE_WEIGHT");
         if (!roeFilter || !roeColumn) return;
-        const reportDate = reportDateForRoeDefault(roeColumn);
+        const defaultRows = typeof reportDisclosureSelect !== "undefined" && reportDisclosureSelect.value === "reported"
+          ? filterRowsByReportDisclosure(activeSource, rows, "reported")
+          : rows;
+        const reportDate = reportDateForRoeDefault(roeColumn, defaultRows);
         if (!reportDate) return;
         const month = Number(reportDate.title.split(".")[1]);
         const defaultValue = { 3: 2.5, 6: 5, 9: 7.5, 12: 10 }[month];
@@ -2101,7 +2118,8 @@
       function getFilteredRowsForSource(source, sourceRows = source && source.rows || []) {
         const keyword = searchInput.value.trim().toLowerCase();
         const sourceFilterKeys = Object.fromEntries(numericFilters.map(filter => [filter.id, findFilterColumnKey(filter, source)]));
-        return sourceRows.filter(row => {
+        const disclosureRows = filterRowsByReportDisclosure(source, sourceRows, reportDisclosureSelect.value);
+        return disclosureRows.filter(row => {
           if (!passesNumericFilters(row, sourceFilterKeys)) return false;
           if (!keyword) return true;
           const haystack = [row["SECURITY_CODE"], row["SECURITY_SHORT_NAME"]].join(" ").toLowerCase();
@@ -2111,6 +2129,40 @@
 
       function getFilteredRows() {
         return getFilteredRowsForSource(activeSource, rows);
+      }
+
+      function filterRowsByReportDisclosure(source, sourceRows, mode) {
+        const latestReportDate = latestReportDateForSource(source, sourceRows);
+        if (!latestReportDate) return sourceRows.slice();
+        return sourceRows.filter(row => {
+          const reportDate = reportDateForSourceRow(row, source);
+          const isLatest = Boolean(reportDate && reportDate.time === latestReportDate.time);
+          return mode === "pending" ? !isLatest : isLatest;
+        });
+      }
+
+      function latestReportDateForSource(source, sourceRows) {
+        return sourceRows.reduce((latest, row) => {
+          const candidate = reportDateForSourceRow(row, source);
+          if (!candidate || latest && candidate.time <= latest.time) return latest;
+          return candidate;
+        }, null);
+      }
+
+      function reportDateForSourceRow(row, source) {
+        return ((source && source.columns) || [])
+          .filter(column => column && isReportMetricColumn(column.key) && !String(column.key).endsWith("&&DATE"))
+          .reduce((latest, column) => {
+            const value = String(row[column.key] || "");
+            const reportText = value.includes("|") ? value.split("|").slice(1).join(" ") : "";
+            const dateColumn = reportDateColumnForMetric(column, source);
+            const dateValue = dateColumn ? String(row[dateColumn.key] || "") : "";
+            const candidate = parseReportDateValue(
+              reportDateFromPeriodText(reportText) || reportDateFromPeriodText(dateValue)
+            );
+            if (!candidate || latest && candidate.time <= latest.time) return latest;
+            return candidate;
+          }, null);
       }
 
       function findFilterColumnKey(filter, source = activeSource) {
@@ -3385,10 +3437,10 @@
         }, null)?.title || "";
       }
 
-      function reportDateCandidatesFromColumnValues(column) {
-        if (!column || !column.key || !Array.isArray(rows)) return [];
+      function reportDateCandidatesFromColumnValues(column, sourceRows = rows) {
+        if (!column || !column.key || !Array.isArray(sourceRows)) return [];
         const dateColumn = reportDateColumnForMetric(column);
-        return rows.map(row => {
+        return sourceRows.map(row => {
           const value = String(row[column.key] || "");
           const reportText = value.includes("|") ? value.split("|").slice(1).join(" ") : "";
           const dateValue = dateColumn ? String(row[dateColumn.key] || "") : "";
@@ -3397,20 +3449,20 @@
         });
       }
 
-      function reportDateColumnForMetric(column) {
-        if (!column || !column.key || !activeSource || !Array.isArray(activeSource.columns)) return null;
+      function reportDateColumnForMetric(column, source = activeSource) {
+        if (!column || !column.key || !source || !Array.isArray(source.columns)) return null;
         const dateKey = `${column.key}&&DATE`;
-        return activeSource.columns.find(item => item && item.key === dateKey) || null;
+        return source.columns.find(item => item && item.key === dateKey) || null;
       }
 
-      function reportDateForRoeDefault(column) {
-        const candidates = reportDateCandidatesFromColumnValues(column);
+      function reportDateForRoeDefault(column, sourceRows = rows) {
+        const candidates = reportDateCandidatesFromColumnValues(column, sourceRows);
         const validCandidates = candidates.filter(Boolean);
         if (!validCandidates.length) return null;
         const latest = validCandidates.reduce((result, candidate) => {
           return !result || candidate.time > result.time ? candidate : result;
         }, null);
-        const allRowsAtLatest = candidates.length === rows.length &&
+        const allRowsAtLatest = candidates.length === sourceRows.length &&
           candidates.every(candidate => candidate && candidate.time === latest.time);
         if (allRowsAtLatest) return latest;
         return previousReportDateForDefault(latest);

@@ -126,6 +126,15 @@ test("ROE default waits for every row to reach the current reporting period", ()
   assert.equal(completeContext.numericFilters[0].minInput.value, "7.5");
 });
 
+test("ROE default follows the latest period when the page shows reported rows", () => {
+  const context = createContext(reportSource(["2026三季报", "2026半年报"]));
+  context.reportDisclosureSelect = { value: "reported" };
+
+  context.setDefaultRoeFilter();
+
+  assert.equal(context.numericFilters[0].minInput.value, "7.5");
+});
+
 test("ROE default ignores an older outlier until the latest report period is complete", () => {
   const context = createContext(reportSource(["2026三季报", "2026一季报"]));
   context.setDefaultRoeFilter();
@@ -149,4 +158,37 @@ test("ROE default falls back one period when a row has no report-date value", ()
   const context = createContext(source);
   context.setDefaultRoeFilter();
   assert.equal(context.numericFilters[0].minInput.value, "5");
+});
+
+test("report disclosure filter separates the latest reporting period from earlier periods", () => {
+  const source = reportSource(["2026三季报", "2026半年报", "2026三季报"]);
+  source.rows.forEach((row, index) => { row.SECURITY_CODE = String(index + 1); });
+  const context = createContext(source);
+
+  assert.deepEqual(
+    Array.from(context.filterRowsByReportDisclosure(source, source.rows, "reported"), row => row.SECURITY_CODE),
+    ["1", "3"]
+  );
+  assert.deepEqual(
+    Array.from(context.filterRowsByReportDisclosure(source, source.rows, "pending"), row => row.SECURITY_CODE),
+    ["2"]
+  );
+});
+
+test("report disclosure filter treats rows without the latest report period as pending", () => {
+  const source = reportSourceWithDateMetadataOnly(["2026三季报", "2026半年报", "2026三季报"]);
+  source.rows.forEach((row, index) => { row.SECURITY_CODE = String(index + 1); });
+  source.rows[2]["ROE_WEIGHT{2026-10-09}&&DATE"] = "";
+  source.rows[2]["XSMLL{2026-10-09}&&DATE"] = "";
+  source.rows[2]["XSJLL{2026-10-09}&&DATE"] = "";
+  const context = createContext(source);
+
+  assert.deepEqual(
+    Array.from(context.filterRowsByReportDisclosure(source, source.rows, "reported"), row => row.SECURITY_CODE),
+    ["1"]
+  );
+  assert.deepEqual(
+    Array.from(context.filterRowsByReportDisclosure(source, source.rows, "pending"), row => row.SECURITY_CODE),
+    ["2", "3"]
+  );
 });
