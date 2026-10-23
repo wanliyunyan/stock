@@ -2011,8 +2011,8 @@
         ];
       }
 
-      function contractLiabilityGrowthGroupTitle(columns) {
-        const dateTitle = latestReportMetricGroupTitle(columns);
+      function contractLiabilityGrowthGroupTitle(columns, sourceRows = rows) {
+        const dateTitle = latestReportMetricGroupTitle(columns, sourceRows);
         return `合同负债 ${dateTitle}`;
       }
 
@@ -2642,7 +2642,7 @@
 
       function render() {
         const filtered = getFilteredRows();
-        table.innerHTML = `${renderHeader()}${renderBody(filtered)}`;
+        table.innerHTML = `${renderHeader(filtered)}${renderBody(filtered)}`;
         updateStickyOffsets();
         setTableLoadingOverlay(dataStatus.type === "loading" && rows.length > 0);
         const notice = document.getElementById("dataNotice");
@@ -3200,12 +3200,13 @@
         element.classList.add(number > 0 ? "value-up" : "value-down");
       }
 
-      function renderHeader() {
+      function renderHeader(sourceRows = rows) {
         const firstRow = [];
         const secondRow = [];
         displayGroups.forEach(group => {
           if (group.children) {
-            firstRow.push(`<th class="group-head" colspan="${group.children.length}"><div class="group-head-inner">${escapeHtml(group.title)}</div></th>`);
+            const groupTitle = displayGroupTitle(group, sourceRows);
+            firstRow.push(`<th class="group-head" colspan="${group.children.length}"><div class="group-head-inner">${escapeHtml(groupTitle)}</div></th>`);
             group.children.forEach(column => {
               secondRow.push(renderHeaderCell(column, false, group.childLabelMode || "subtitle"));
             });
@@ -3214,6 +3215,19 @@
           }
         });
         return `<thead><tr>${firstRow.join("")}</tr><tr>${secondRow.join("")}</tr></thead>`;
+      }
+
+      function displayGroupTitle(group, sourceRows = rows) {
+        if (!group || !Array.isArray(group.children) || !group.children.length || !sourceRows.length) {
+          return group?.title || "";
+        }
+        if (group.children.every(column => isReportMetricColumn(column.key))) {
+          return latestReportMetricGroupTitle(group.children, sourceRows);
+        }
+        if (group.children.every(column => isGrowthRateColumn(column.key))) {
+          return contractLiabilityGrowthGroupTitle(group.children, sourceRows);
+        }
+        return group.title;
       }
 
       function renderHeaderCell(column, rowSpan, childLabelMode) {
@@ -3411,27 +3425,27 @@
         return formatReportPeriod(String(row[key]).split("|").slice(1).join(" "));
       }
 
-      function latestReportMetricGroupTitle(columns) {
+      function latestReportMetricGroupTitle(columns, sourceRows = rows) {
         const latest = columns.reduce((result, column) => {
-          const candidate = parseReportDateValue(reportDateTitleText(column));
+          const candidate = parseReportDateValue(reportDateTitleText(column, sourceRows));
           if (!candidate) return result;
           if (!result || candidate.time > result.time) return candidate;
           return result;
         }, null);
         if (latest) return latest.title;
-        return parseReportDateValue(reportDateTitleText(columns[0]))?.title ||
-          formatReportDateTitle(reportDateTitleText(columns[0])) ||
+        return parseReportDateValue(reportDateTitleText(columns[0], sourceRows))?.title ||
+          formatReportDateTitle(reportDateTitleText(columns[0], sourceRows)) ||
           "报表时间";
       }
 
-      function reportDateTitleText(column) {
+      function reportDateTitleText(column, sourceRows = rows) {
         if (!column) return "";
-        return reportDateFromColumnValues(column) || column.dateMsg || reportDateFromKey(column.key) || "";
+        return reportDateFromColumnValues(column, sourceRows) || column.dateMsg || reportDateFromKey(column.key) || "";
       }
 
-      function reportDateFromColumnValues(column) {
+      function reportDateFromColumnValues(column, sourceRows = rows) {
         if (!column || !column.key) return "";
-        return reportDateCandidatesFromColumnValues(column).reduce((latest, candidate) => {
+        return reportDateCandidatesFromColumnValues(column, sourceRows).reduce((latest, candidate) => {
           if (!candidate) return latest;
           return !latest || candidate.time > latest.time ? candidate : latest;
         }, null)?.title || "";

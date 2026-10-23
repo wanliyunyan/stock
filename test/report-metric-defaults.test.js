@@ -192,3 +192,32 @@ test("report disclosure filter treats rows without the latest report period as p
     ["2", "3"]
   );
 });
+
+test("report-dated group titles follow the rows selected by disclosure status", () => {
+  const periods = ["2026三季报", "2026半年报"];
+  const source = reportSource(periods);
+  source.columns.push(
+    { title: "合同负债同比增长率", key: "CONTRACTLIAB同比增长率{2026-10-23}", dateMsg: "截至2026.10.23最新", unit: "%" },
+    { title: "合同负债环比增长率", key: "CONTRACTLIAB环比增长率{2026-10-23}", dateMsg: "截至2026.10.23最新", unit: "%" }
+  );
+  source.rows.forEach((row, index) => {
+    row["CONTRACTLIAB同比增长率{2026-10-23}"] = `40|${periods[index]}`;
+    row["CONTRACTLIAB环比增长率{2026-10-23}"] = `30|${periods[index]}`;
+  });
+  const context = createContext(source);
+  const pendingRows = context.filterRowsByReportDisclosure(source, source.rows, "pending");
+  const reportGroup = context.displayGroups.find(group =>
+    group.children?.some(column => String(column.key).startsWith("ROE_WEIGHT"))
+  );
+  const growthGroup = context.displayGroups.find(group =>
+    group.children?.every(column => context.isGrowthRateColumn(column.key))
+  );
+
+  assert.equal(context.displayGroupTitle(reportGroup, pendingRows), "2026.6.30");
+  assert.equal(context.displayGroupTitle(growthGroup, pendingRows), "合同负债 2026.6.30");
+  context.sortState = { key: "", direction: "asc" };
+  const header = context.renderHeader(pendingRows);
+  assert.match(header, />2026\.6\.30</);
+  assert.match(header, />合同负债 2026\.6\.30</);
+  assert.doesNotMatch(header, />2026\.9\.30</);
+});
