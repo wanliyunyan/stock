@@ -77,6 +77,29 @@ test("report columns display numeric metrics instead of update-date metadata", (
   ]);
 });
 
+test("contract liability group keeps only the five most recent reporting periods", () => {
+  const source = reportSource();
+  source.columns.push(...[
+    "2025-06-30", "2026-03-31", "2025-12-31",
+    "2026-09-30", "2025-09-30", "2026-06-30"
+  ].map(date => ({
+    title: "合同负债",
+    key: `CONTRACTLIAB{${date}}`,
+    dateMsg: date.replaceAll("-", "."),
+    unit: "元"
+  })));
+  const context = createContext(source);
+  const group = context.displayGroups.find(item => item.title === "合同负债");
+
+  assert.deepEqual(Array.from(group.children, column => column.key), [
+    "CONTRACTLIAB{2026-09-30}",
+    "CONTRACTLIAB{2026-06-30}",
+    "CONTRACTLIAB{2026-03-31}",
+    "CONTRACTLIAB{2025-12-31}",
+    "CONTRACTLIAB{2025-09-30}"
+  ]);
+});
+
 test("ROE default follows the actual reporting period even with newer update-date columns", () => {
   for (const [period, expected] of [
     ["2026一季报", "2.5"], ["2026半年报", "5"], ["2026三季报", "7.5"], ["2025年报", "10"]
@@ -128,6 +151,18 @@ test("ROE default waits for every row to reach the current reporting period", ()
 
 test("ROE default follows the latest period when the page shows reported rows", () => {
   const context = createContext(reportSource(["2026三季报", "2026半年报"]));
+  context.reportDisclosureSelect = { value: "reported" };
+
+  context.setDefaultRoeFilter();
+
+  assert.equal(context.numericFilters[0].minInput.value, "7.5");
+});
+
+test("ROE default stays on the reported period when one reported row has older ROE data", () => {
+  const source = reportSource(["2026三季报", "2026三季报"]);
+  source.rows[1]["ROE_WEIGHT{2026-10-09}"] = "-5.47|2026一季报";
+  source.rows[1]["ROE_WEIGHT{2026-10-09}&&DATE"] = "2026一季报";
+  const context = createContext(source);
   context.reportDisclosureSelect = { value: "reported" };
 
   context.setDefaultRoeFilter();

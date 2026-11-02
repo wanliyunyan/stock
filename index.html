@@ -1399,10 +1399,13 @@
         const roeFilter = numericFilters.find(filter => filter.id === "roe");
         const roeColumn = latestReportMetricColumnForPrefix(leafColumns, "ROE_WEIGHT");
         if (!roeFilter || !roeColumn) return;
-        const defaultRows = typeof reportDisclosureSelect !== "undefined" && reportDisclosureSelect.value === "reported"
+        const showingReportedRows = typeof reportDisclosureSelect !== "undefined" && reportDisclosureSelect.value === "reported";
+        const defaultRows = showingReportedRows
           ? filterRowsByReportDisclosure(activeSource, rows, "reported")
           : rows;
-        const reportDate = reportDateForRoeDefault(roeColumn, defaultRows);
+        const reportDate = showingReportedRows
+          ? latestReportDateForSource(activeSource, defaultRows)
+          : reportDateForRoeDefault(roeColumn, defaultRows);
         if (!reportDate) return;
         const month = Number(reportDate.title.split(".")[1]);
         const defaultValue = { 3: 2.5, 6: 5, 9: 7.5, 12: 10 }[month];
@@ -1799,9 +1802,6 @@
       }
 
       function groupContractLiabilityColumns(groups) {
-        if (groups.some(group => group.title === "合同负债" && Array.isArray(group.children) && group.children.length)) {
-          return groups;
-        }
         const contractChildren = [];
         const orderedGroups = [];
         let insertAt = -1;
@@ -1819,6 +1819,8 @@
         const contractGroup = {
           title: "合同负债",
           children: contractChildren
+            .sort((a, b) => reportDateSortValue(b) - reportDateSortValue(a))
+            .slice(0, 5)
         };
         const safeInsertAt = insertAt < 0 ? orderedGroups.length : insertAt;
         orderedGroups.splice(safeInsertAt, 0, contractGroup);
