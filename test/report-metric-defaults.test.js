@@ -100,6 +100,39 @@ test("contract liability group keeps only the five most recent reporting periods
   ]);
 });
 
+test("contract liability filter requires the current period to rank top two and exceed the five-period average", () => {
+  const source = reportSource(Array(5).fill("2026三季报"));
+  const dates = ["2026-09-30", "2026-06-30", "2026-03-31", "2025-12-31", "2025-09-30"];
+  source.columns.push(...dates.map(date => ({
+    title: "合同负债",
+    key: `CONTRACTLIAB{${date}}`,
+    dateMsg: date.replaceAll("-", "."),
+    unit: "元"
+  })));
+  const cases = [
+    ["max", [500, 400, 300, 200, 100]],
+    ["second", [400, 500, 300, 200, 100]],
+    ["third", [400, 500, 600, 0, 0]],
+    ["average", [100, 100, 100, 100, 100]],
+    ["missing", [500, 400, 300, 200, "-"]]
+  ];
+  source.rows.forEach((row, rowIndex) => {
+    row.SECURITY_CODE = cases[rowIndex][0];
+    dates.forEach((date, dateIndex) => {
+      row[`CONTRACTLIAB{${date}}`] = cases[rowIndex][1][dateIndex];
+    });
+  });
+  const context = createContext(source);
+  context.searchInput = { value: "" };
+  context.reportDisclosureSelect = { value: "reported" };
+  context.sortState = { key: "", direction: "asc" };
+
+  assert.deepEqual(
+    Array.from(context.getFilteredRowsForSource(source), row => row.SECURITY_CODE),
+    ["max", "second"]
+  );
+});
+
 test("ROE default follows the actual reporting period even with newer update-date columns", () => {
   for (const [period, expected] of [
     ["2026一季报", "2.5"], ["2026半年报", "5"], ["2026三季报", "7.5"], ["2025年报", "10"]

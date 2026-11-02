@@ -6,6 +6,15 @@ const vm = require("node:vm");
 
 const page = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 
+test("page shows the contract liability hard requirement after the growth controls", () => {
+  const qoqControlIndex = page.indexOf('id="qoqMaxInput"');
+  const requirementIndex = page.indexOf('class="contract-hard-rule"');
+
+  assert.ok(qoqControlIndex >= 0);
+  assert.ok(requirementIndex > qoqControlIndex);
+  assert.match(page.slice(requirementIndex), /当期合同负债须为近5期最大或第二大，且高于近5期平均值/);
+});
+
 test("page includes a visible visit count and loads it from the Worker", async () => {
   assert.match(page, /id="visitCount"/);
   const recordPageVisit = page.match(/async function recordPageVisit\(\) \{[\s\S]*?\n      \}/);

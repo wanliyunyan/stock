@@ -278,6 +278,19 @@
       background: #ffffff;
     }
 
+    .contract-hard-rule {
+      flex: 1 1 320px;
+      min-width: 260px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.5;
+    }
+
+    .contract-hard-rule strong {
+      color: var(--accent);
+    }
+
     .range-label {
       overflow: hidden;
       color: #344052;
@@ -1035,6 +1048,7 @@
               <input class="range-input" id="qoqMaxInput" type="number" step="0.01" inputmode="decimal" placeholder="最大" aria-label="合同负债环比增长率最大值">
             </span>
           </label>
+          <span class="contract-hard-rule"><strong>硬性要求：</strong>当期合同负债须为近5期最大或第二大，且高于近5期平均值</span>
         </div>
         <div class="query-links">
           <a class="source-link" id="sourceLink" href="#" target="_blank" rel="noreferrer">来源页面</a>
@@ -1816,11 +1830,11 @@
           orderedGroups.push(group);
         });
         if (!contractChildren.length) return groups;
+        const recentValueColumns = recentContractLiabilityValueColumns(contractChildren);
+        const otherContractColumns = contractChildren.filter(column => !isContractLiabilityValueKey(column.key));
         const contractGroup = {
           title: "合同负债",
-          children: contractChildren
-            .sort((a, b) => reportDateSortValue(b) - reportDateSortValue(a))
-            .slice(0, 5)
+          children: [...recentValueColumns, ...otherContractColumns]
         };
         const safeInsertAt = insertAt < 0 ? orderedGroups.length : insertAt;
         orderedGroups.splice(safeInsertAt, 0, contractGroup);
@@ -1829,6 +1843,17 @@
 
       function isContractLiabilityKey(key) {
         return String(key || "").startsWith("CONTRACTLIAB");
+      }
+
+      function isContractLiabilityValueKey(key) {
+        return /^CONTRACTLIAB\{\d{4}-\d{2}-\d{2}\}$/.test(String(key || ""));
+      }
+
+      function recentContractLiabilityValueColumns(columns) {
+        return columns
+          .filter(column => column && isContractLiabilityValueKey(column.key))
+          .sort((a, b) => reportDateSortValue(b) - reportDateSortValue(a))
+          .slice(0, 5);
       }
 
       function groupRealtimeQuoteColumns(groups) {
@@ -2122,6 +2147,7 @@
         const sourceFilterKeys = Object.fromEntries(numericFilters.map(filter => [filter.id, findFilterColumnKey(filter, source)]));
         const disclosureRows = filterRowsByReportDisclosure(source, sourceRows, reportDisclosureSelect.value);
         return disclosureRows.filter(row => {
+          if (!passesContractLiabilityRequirement(row, source)) return false;
           if (!passesNumericFilters(row, sourceFilterKeys)) return false;
           if (!keyword) return true;
           const haystack = [row["SECURITY_CODE"], row["SECURITY_SHORT_NAME"]].join(" ").toLowerCase();
@@ -2206,6 +2232,19 @@
 
       function valueForNumericFilter(row, key) {
         return row[key];
+      }
+
+      function passesContractLiabilityRequirement(row, source) {
+        const columns = ((source && source.columns) || []).flatMap(column => column.children || [column]);
+        const contractColumns = recentContractLiabilityValueColumns(columns);
+        if (contractColumns.length !== 5) return false;
+        const values = contractColumns.map(column => numericValue(row[column.key]));
+        if (values.some(Number.isNaN)) return false;
+        const currentValue = values[0];
+        const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+        const rankedValues = values.slice().sort((a, b) => b - a);
+        const ranksInTopTwo = currentValue === rankedValues[0] || currentValue === rankedValues[1];
+        return ranksInTopTwo && currentValue > average;
       }
 
       function clearNumericFilters(filters = numericFilters) {
