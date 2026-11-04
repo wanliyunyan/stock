@@ -70,6 +70,27 @@ test("operating cash flow uses the current year and previous two years in Beijin
   assert.deepEqual(Array.from(context.cashConversionYears(beijingNewYear)), [2024, 2025, 2026]);
 });
 
+test("operating cash flow uses annual reports for prior years and the current report for this year", () => {
+  const context = createContext(reportSource("2026三季报"));
+  const periods = context.cashConversionPeriods(context.activeSource, new Date("2026-11-04T01:30:00.000Z"));
+
+  assert.deepEqual(Array.from(periods, period => ({
+    year: period.year,
+    date: period.date,
+    reportName: period.reportName
+  })), [
+    { year: 2024, date: "2024-12-31", reportName: "年报" },
+    { year: 2025, date: "2025-12-31", reportName: "年报" },
+    { year: 2026, date: "2026-09-30", reportName: "三季报" }
+  ]);
+
+  const query = context.buildCashConversionQuery("不要ST股;", periods);
+  assert.match(query, /2024年年报经营活动产生的现金流量净额/);
+  assert.match(query, /2025年年报经营活动产生的现金流量净额/);
+  assert.match(query, /2026年三季报经营活动产生的现金流量净额/);
+  assert.doesNotMatch(query, /2026年年报经营活动产生的现金流量净额/);
+});
+
 test("report columns display numeric metrics instead of update-date metadata", () => {
   const context = createContext();
   assert.deepEqual(Array.from(context.leafColumns, column => column.key), [
