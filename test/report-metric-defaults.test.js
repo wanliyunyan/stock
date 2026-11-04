@@ -63,6 +63,13 @@ function createContext(source = reportSource()) {
   return context;
 }
 
+test("operating cash flow uses the current year and previous two years in Beijing time", () => {
+  const context = createContext();
+  const beijingNewYear = new Date("2025-12-31T16:00:00.000Z");
+
+  assert.deepEqual(Array.from(context.cashConversionYears(beijingNewYear)), [2024, 2025, 2026]);
+});
+
 test("report columns display numeric metrics instead of update-date metadata", () => {
   const context = createContext();
   assert.deepEqual(Array.from(context.leafColumns, column => column.key), [

@@ -1124,7 +1124,7 @@
                 <input class="range-input" id="dividendPayoutRatioMaxInput" type="number" step="0.01" inputmode="decimal" placeholder="最大" aria-label="股息支付率最大值">
               </span>
             </label>
-            <label class="range-filter" title="最近三个完整年度经营现金流净额合计 ÷ 同期合并净利润合计；按倍数筛选，例如最小值填1表示至少1倍。数据不全或累计净利润≤0时不计算。">
+            <label class="range-filter" title="今年及前两年年报经营现金流净额合计 ÷ 同期合并净利润合计；按倍数筛选，例如最小值填1表示至少1倍。数据不全或累计净利润≤0时不计算。">
               <span class="range-label">近三年累计净现比（倍）</span>
               <span class="range-inputs">
                 <input class="range-input" id="cashConversionMinInput" type="number" step="0.01" value="0.5" inputmode="decimal" placeholder="最小倍" aria-label="近三年累计净现比最小值，单位倍">
@@ -2328,7 +2328,7 @@
 
       function cashConversionYears(now = new Date()) {
         const year = Number(new Intl.DateTimeFormat("en", { timeZone: "Asia/Shanghai", year: "numeric" }).format(now));
-        return [year - 3, year - 2, year - 1];
+        return [year - 2, year - 1, year];
       }
 
       function buildCashConversionQuery(query, years) {
