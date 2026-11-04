@@ -128,6 +128,38 @@ test("contract liability group keeps only the five most recent reporting periods
   ]);
 });
 
+test("contract liability column ordering does not scan stock rows when dates are in the keys", () => {
+  const source = reportSource();
+  source.columns.push(...[
+    "2025-06-30", "2026-03-31", "2025-12-31",
+    "2026-09-30", "2025-09-30", "2026-06-30"
+  ].map(date => ({
+    title: "合同负债",
+    key: `CONTRACTLIAB{${date}}`,
+    dateMsg: date.replaceAll("-", "."),
+    unit: "元"
+  })));
+  source.rows = source.rows.map(row => new Proxy(row, {
+    get(target, key, receiver) {
+      if (String(key).startsWith("CONTRACTLIAB{")) {
+        throw new Error("contract liability column ordering scanned a stock row");
+      }
+      return Reflect.get(target, key, receiver);
+    }
+  }));
+
+  const context = createContext(source);
+  const group = context.displayGroups.find(item => item.title === "合同负债");
+
+  assert.deepEqual(Array.from(group.children, column => column.key), [
+    "CONTRACTLIAB{2026-09-30}",
+    "CONTRACTLIAB{2026-06-30}",
+    "CONTRACTLIAB{2026-03-31}",
+    "CONTRACTLIAB{2025-12-31}",
+    "CONTRACTLIAB{2025-09-30}"
+  ]);
+});
+
 test("contract liability filter requires the current period to rank top two and exceed the five-period average", () => {
   const source = reportSource(Array(5).fill("2026三季报"));
   const dates = ["2026-09-30", "2026-06-30", "2026-03-31", "2025-12-31", "2025-09-30"];
@@ -159,6 +191,40 @@ test("contract liability filter requires the current period to rank top two and 
     Array.from(context.getFilteredRowsForSource(source), row => row.SECURITY_CODE),
     ["max", "second"]
   );
+});
+
+test("contract liability filtering resolves recent columns once per result set", () => {
+  const source = reportSource(Array(5).fill("2026三季报"));
+  const dates = ["2026-09-30", "2026-06-30", "2026-03-31", "2025-12-31", "2025-09-30"];
+  source.columns.push(...dates.map(date => ({
+    title: "合同负债",
+    key: `CONTRACTLIAB{${date}}`,
+    dateMsg: date.replaceAll("-", "."),
+    unit: "元"
+  })));
+  source.rows.forEach((row, rowIndex) => {
+    row.SECURITY_CODE = String(rowIndex + 1);
+    dates.forEach((date, dateIndex) => {
+      row[`CONTRACTLIAB{${date}}`] = 500 - dateIndex * 100;
+    });
+  });
+  let columnResolutionCount = 0;
+  Object.defineProperty(source.columns, "flatMap", {
+    configurable: true,
+    value(...args) {
+      columnResolutionCount += 1;
+      return Array.prototype.flatMap.apply(this, args);
+    }
+  });
+  const context = createContext(source);
+  context.searchInput = { value: "" };
+  context.reportDisclosureSelect = { value: "reported" };
+  context.sortState = { key: "", direction: "asc" };
+
+  const filtered = context.getFilteredRowsForSource(source);
+
+  assert.equal(filtered.length, 5);
+  assert.equal(columnResolutionCount, 1);
 });
 
 test("ROE default follows the actual reporting period even with newer update-date columns", () => {

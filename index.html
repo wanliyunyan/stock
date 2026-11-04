@@ -2010,7 +2010,10 @@
       }
 
       function reportDateSortValue(column) {
-        const parsed = parseReportDateValue(reportDateTitleText(column));
+        const dateText = isContractLiabilityValueKey(column?.key)
+          ? reportDateFromKey(column.key)
+          : reportDateTitleText(column);
+        const parsed = parseReportDateValue(dateText);
         return parsed ? parsed.time : -Infinity;
       }
 
@@ -2145,9 +2148,12 @@
       function getFilteredRowsForSource(source, sourceRows = source && source.rows || []) {
         const keyword = searchInput.value.trim().toLowerCase();
         const sourceFilterKeys = Object.fromEntries(numericFilters.map(filter => [filter.id, findFilterColumnKey(filter, source)]));
+        const contractColumns = recentContractLiabilityValueColumns(
+          ((source && source.columns) || []).flatMap(column => column.children || [column])
+        );
         const disclosureRows = filterRowsByReportDisclosure(source, sourceRows, reportDisclosureSelect.value);
         return disclosureRows.filter(row => {
-          if (!passesContractLiabilityRequirement(row, source)) return false;
+          if (!passesContractLiabilityRequirement(row, source, contractColumns)) return false;
           if (!passesNumericFilters(row, sourceFilterKeys)) return false;
           if (!keyword) return true;
           const haystack = [row["SECURITY_CODE"], row["SECURITY_SHORT_NAME"]].join(" ").toLowerCase();
@@ -2234,9 +2240,10 @@
         return row[key];
       }
 
-      function passesContractLiabilityRequirement(row, source) {
-        const columns = ((source && source.columns) || []).flatMap(column => column.children || [column]);
-        const contractColumns = recentContractLiabilityValueColumns(columns);
+      function passesContractLiabilityRequirement(row, source, resolvedContractColumns) {
+        const contractColumns = resolvedContractColumns || recentContractLiabilityValueColumns(
+          ((source && source.columns) || []).flatMap(column => column.children || [column])
+        );
         if (contractColumns.length !== 5) return false;
         const values = contractColumns.map(column => numericValue(row[column.key]));
         if (values.some(Number.isNaN)) return false;
